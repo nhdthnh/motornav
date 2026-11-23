@@ -36,6 +36,7 @@ String navStreet = "";
 unsigned long lastRx = 0;
 bool   needRedraw = true;
 bool   timedOut = true;
+bool   wasConnected = false;
 
 // ---- Bo dem nhan BLE ----
 volatile bool hasData = false;
@@ -133,7 +134,7 @@ void setup() {
   u8g2.begin();
   u8g2.setContrast(255);
 
-  advdata.addFlags(GAP_ADTYPE_FLAGS_LIMITED | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED);
+  advdata.addFlags(GAP_ADTYPE_FLAGS_GENERAL | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED);
   advdata.addCompleteName("MotoNav");
   scndata.addCompleteServices(BLEUUID(UART_SERVICE_UUID));
 
@@ -163,6 +164,16 @@ void setup() {
 }
 
 void loop() {
+  bool isConnected = BLE.connected(0);
+  if (wasConnected && !isConnected) {
+    // Ngat ket noi (tat Bluefy, thoat app hoac ra xa) -> Khoi dong lai quang ba BLE
+    delay(50);
+    BLE.configAdvert()->startAdv();
+    timedOut = true;
+    needRedraw = true;
+  }
+  wasConnected = isConnected;
+
   if (hasData) {
     String chunk = pending;
     pending = "";
