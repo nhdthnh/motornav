@@ -163,6 +163,10 @@ function setBle(text, ok) {
   }
 }
 
+let blePingTimer = null;
+let lastGpsFix = 0;
+let gpsWatchdogTimer = null;
+
 async function openGatt() {
   const server = await device.gatt.connect();
   const svc = await server.getPrimaryService(SVC);
@@ -171,11 +175,24 @@ async function openGatt() {
   setBle('Đã kết nối thành công với ' + (device.name || 'MotoNav'), true);
   // Gửi xác nhận kết nối lên OLED ngay lập tức
   send('C|OK|Da ket noi\n', true);
+
+  // Giữ nhịp tim BLE (Heartbeat) liên tục mỗi 2.5 giây để tránh iOS / BW16 ngắt kết nối do rảnh rỗi
+  clearInterval(blePingTimer);
+  blePingTimer = setInterval(() => {
+    if (rxChar) {
+      if (navigating && curMsg) send(curMsg, false);
+      else sendRaw('K||\n');
+    }
+  }, 2500);
+
+  // Kích hoạt giữ sáng màn hình
+  lockScreen();
 }
 
 function onDisconnected() {
   rxChar = null;
-  setBle('Mất kết nối, đang tự nối lại…', false);
+  clearInterval(blePingTimer);
+  setBle('Mất kết nối BLE, đang tự kết nối lại…', false);
   const retry = async () => {
     if (rxChar || !device) return;
     try { await openGatt(); } catch (e) { setTimeout(retry, 2500); }
@@ -724,6 +741,8 @@ async function reroute(p) {
 
 // ================= THEO DÕI VỊ TRÍ GPS VÀ DẪN ĐƯỜNG =================
 function onPos(pos) {
+  lastGpsFix = Date.now();
+  if (navigating) setMsg('Đang dẫn đường');
   if (pos.coords.accuracy > 80) return; // Bỏ qua điểm quá nhiễu
   const p = [pos.coords.longitude, pos.coords.latitude];
   const heading = pos.coords.heading || currentHeading || 0;
@@ -818,35 +837,65 @@ $('btnLocate').onclick = () => {
       if (mapEngine === 'google' && gMap) gMap.panTo({ lat: lastPos[1], lng: lastPos[0] });
       else if (lMap) lMap.panTo([lastPos[1], lastPos[0]]);
       setMsg('Đã lấy vị trí GPS hiện tại');
-    }, e => setMsg('Không lấy được GPS: ' + e.message), { enableHighAccuracy: true });
+    }, e => onGpsError(e), { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 });
   }
 };
+
+function onGpsError(e) {
+  console.warn('GPS Error:', e.code, e.message);
+  if (e.code === 3) {
+    setMsg('Đang tìm vệ tinh GPS… (Nếu ở trong nhà hãy ra gần cửa sổ hoặc ra ngoài trời)');
+  } else if (e.code === 1) {
+    setMsg('GPS bị chặn: Vui lòng cho phép quyền Vị trí trong Cài đặt iPhone.');
+  } else {
+    setMsg('Tín hiệu GPS yếu: ' + e.message);
+  }
+}
+
+function startGpsWatch() {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = navigator.geolocation.watchPosition(onPos, onGpsError, {
+    enableHighAccuracy: true,
+    maximumAge: 3000, // Cho phép dùng vị trí cách đây 3s để tránh timeout tức thì
+    timeout: 10000    // Kiểm tra mỗi 10 giây
+  });
+}
 
 $('btnStart').onclick = async () => {
   if (!dest) { setMsg('Hãy tìm và chọn điểm đến trước'); return; }
   try {
-    setMsg('Đang lấy toạ độ GPS chính xác…');
-    const pos = await new Promise((ok, err) =>
-      navigator.geolocation.getCurrentPosition(ok, err, { enableHighAccuracy: true, timeout: 15000 }));
-    const p = [pos.coords.longitude, pos.coords.latitude];
-    lastPos = p;
-    setMsg('Đang tính lộ trình tối ưu…');
+    let p = lastPos;
+    if (!p) {
+      setMsg('Đang lấy toạ độ GPS…');
+      const pos = await new Promise((ok, err) =>
+        navigator.geolocation.getCurrentPosition(ok, err, { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }));
+      p = [pos.coords.longitude, pos.coords.latitude];
+      lastPos = p;
+    }
+    setMsg('Đang tính lộ trình…');
     await buildRoute(p);
     navigating = true;
-    watchId = navigator.geolocation.watchPosition(onPos, e => setMsg('GPS: ' + e.message),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
-    clearInterval(keepTimer);
-    keepTimer = setInterval(() => { if (navigating && curMsg) send(curMsg, true); }, 2500);
+    lastGpsFix = Date.now();
+    startGpsWatch();
+
+    // Watchdog: Nếu quá 15s không có tín hiệu GPS mới, tự khởi động lại watchPosition
+    clearInterval(gpsWatchdogTimer);
+    gpsWatchdogTimer = setInterval(() => {
+      if (navigating && Date.now() - lastGpsFix > 15000) {
+        console.warn('GPS Watchdog: Tự động khởi động lại bộ thu GPS…');
+        startGpsWatch();
+      }
+    }, 5000);
+
     lockScreen();
     setMsg('Đang dẫn đường');
-    onPos(pos);
   } catch (e) { setMsg('Lỗi: ' + e.message); }
 };
 
 $('btnStop').onclick = () => {
   navigating = false;
-  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-  clearInterval(keepTimer);
+  if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  clearInterval(gpsWatchdogTimer);
   if (wake) { wake.release().catch(() => {}); wake = null; }
   send('X||\n', true);
   render('X', '--', 'Đã dừng');

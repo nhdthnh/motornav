@@ -119,7 +119,7 @@ volatile bool hasData = false;
 String pending = "";
 String lineBuf = "";
 
-const unsigned long TIMEOUT_MS = 8000;
+const unsigned long TIMEOUT_MS = 15000;
 const unsigned long ADV_KICK_MS = 3000;  // khi chua ket noi: cu 3s ep phat quang ba lai (an toan neu dang phat)
 
 void writeCB(BLECharacteristic* chr, uint8_t /*connID*/) {
@@ -199,6 +199,12 @@ void render() {
 }
 
 void handleLine(const String& s) {
+  if (s.startsWith("K|")) {
+    // Goi tin heartbeat giu ket noi tu dien thoai
+    lastRx = millis();
+    timedOut = false;
+    return;
+  }
   int i1 = s.indexOf('|');
   if (i1 < 1) return;
   int i2 = s.indexOf('|', i1 + 1);
@@ -300,7 +306,8 @@ void loop() {
     }
   }
 
-  if (!timedOut && millis() - lastRx > TIMEOUT_MS) {
+  // Chi bao timeout mat tin hieu khi DANG DAN DUONG (navDir khac 'C' va 'X')
+  if (!timedOut && navDir != 'C' && navDir != 'X' && millis() - lastRx > TIMEOUT_MS) {
     timedOut = true;
     needRedraw = true;
   }
