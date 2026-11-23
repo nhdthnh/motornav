@@ -1,0 +1,325 @@
+/* ==========================================================================
+   MotoNav - Daylight High-Contrast Light Theme (Chế độ sáng)
+   Tối ưu hiển thị ngoài trời nắng khi gắn điện thoại trên ghi-đông xe máy
+   ========================================================================== */
+
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --card-border: #e2e8f0;
+  --card-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  
+  --fg: #0f172a;
+  --fg-sec: #334155;
+  --mut: #64748b;
+  
+  --acc: #0284c7;
+  --acc-hover: #0369a1;
+  --acc-light: #e0f2fe;
+  
+  --ok: #15803d;
+  --ok-bg: #dcfce7;
+  
+  --warn: #b45309;
+  --warn-bg: #fef3c7;
+  
+  --bad: #dc2626;
+  --bad-bg: #fee2e2;
+  
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 12px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thẻ khối (Cards) */
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--card-shadow);
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--fg);
+}
+
+/* Nút bấm (Buttons) */
+button {
+  background: var(--acc);
+  color: #ffffff;
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, transform .05s;
+}
+button:active {
+  transform: scale(0.98);
+}
+button.sec {
+  background: #f1f5f9;
+  color: var(--fg-sec);
+  border: 1px solid var(--card-border);
+}
+button.sec:hover, button.sec:active {
+  background: #e2e8f0;
+}
+button.bad {
+  background: var(--bad);
+  color: #ffffff;
+}
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* Ô nhập liệu */
+input {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  border-radius: 10px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--fg);
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+input:focus {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.row > * {
+  flex: 1;
+}
+
+/* Huy hiệu (Pills / Badges) */
+.pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: var(--fg-sec);
+}
+.pill.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.pill.warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.pill.info {
+  background: var(--acc-light);
+  color: var(--acc);
+}
+
+/* Kết quả tìm kiếm (Search results) */
+.res {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--card-border);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  margin-top: 4px;
+  background: #ffffff;
+  transition: background .15s;
+}
+.res:hover, .res:active {
+  background: #f1f5f9;
+}
+.res:last-child {
+  border-bottom: 0;
+}
+.res-icon {
+  font-size: 16px;
+  opacity: .85;
+}
+.res-body {
+  flex: 1;
+  min-width: 0;
+}
+.res-title {
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.res-sub {
+  font-size: 12px;
+  color: var(--mut);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* Danh sách tuyến đường gợi ý */
+.route-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.route-opt {
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 2px solid var(--card-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.route-opt:hover {
+  background: #f1f5f9;
+}
+.route-opt.active {
+  border-color: var(--acc);
+  background: #f0f9ff;
+}
+.route-opt-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.route-time {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fg);
+}
+.route-opt.active .route-time {
+  color: var(--acc);
+}
+.route-dist {
+  font-size: 14px;
+  color: var(--mut);
+  margin-left: 6px;
+}
+.route-via {
+  font-size: 13px;
+  color: var(--mut);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.route-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-weight: 600;
+}
+
+/* Màn hình HUD lớn chỉ hướng ngoài trời */
+.big {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+#arrow {
+  font-size: 64px;
+  width: 70px;
+  text-align: center;
+  line-height: 1;
+  color: var(--acc);
+}
+#dist {
+  font-size: 38px;
+  font-weight: 800;
+  color: var(--fg);
+  line-height: 1.1;
+}
+#street {
+  color: var(--fg-sec);
+  font-size: 17px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.mut {
+  color: var(--mut);
+  font-size: 13px;
+}
+code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 13px;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--fg-sec);
+}
+
+/* Khung hiển thị bản đồ */
+#map {
+  width: 100%;
+  height: 270px;
+  border-radius: 12px;
+  margin-top: 10px;
+  background: #e2e8f0;
+  border: 1px solid var(--card-border);
+  z-index: 1;
+}
+
+/* Google Maps Places Autocomplete dropdown */
+.pac-container {
+  z-index: 9999 !important;
+  background-color: #ffffff;
+  border: 1px solid var(--card-border);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  margin-top: 4px;
+  font-family: inherit;
+}
+.pac-item {
+  color: var(--fg);
+  border-top: 1px solid #f1f5f9;
+  padding: 10px;
+  font-size: 14px;
+}
+.pac-item:hover {
+  background-color: #f1f5f9;
+}
+.pac-item-query {
+  color: var(--acc);
+  font-size: 14px;
+}
+.pac-matched {
+  font-weight: bold;
+  color: #0f172a;
+}

@@ -1,914 +1,113 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MotoNav - Dẫn đường Google Maps & BLE</title>
-<!-- Leaflet (dùng làm bản đồ dự phòng miễn phí khi chưa có Google API Key) -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MotoNav - Dẫn đường Xe máy & BLE</title>
 
-<style>
-  :root { --bg:#0e1116; --card:#181d25; --fg:#e8edf3; --mut:#8b96a5; --acc:#3ea6ff; --ok:#3ecf8e; --warn:#f5a623; --bad:#ff5c5c; }
-  * { box-sizing: border-box; }
-  body { margin:0; padding:12px; padding-top:calc(12px + env(safe-area-inset-top)); padding-bottom:calc(12px + env(safe-area-inset-bottom));
-         background:var(--bg); color:var(--fg); font:16px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
-  .card { background:var(--card); border-radius:14px; padding:14px; margin-bottom:12px; }
-  h1 { font-size:18px; margin:0 0 10px; display:flex; justify-content:space-between; align-items:center; }
-  button { background:var(--acc); color:#04121f; border:0; border-radius:10px; padding:12px 14px; font-size:15px; font-weight:600; cursor:pointer; }
-  button.sec { background:#2a323d; color:var(--fg); }
-  button.bad { background:var(--bad); color:#fff; }
-  button:disabled { opacity:.5; cursor:not-allowed; }
-  input { width:100%; padding:12px; font-size:16px; border-radius:10px; border:1px solid #2a323d; background:#0e1116; color:var(--fg); }
-  .row { display:flex; gap:8px; margin-top:8px; }
-  .row > * { flex:1; }
-  .pill { display:inline-block; padding:4px 10px; border-radius:20px; font-size:13px; background:#2a323d; }
-  .pill.ok { background:#12382a; color:var(--ok); }
-  .pill.warn { background:#3d2e0e; color:var(--warn); }
-  .pill.info { background:#122a3d; color:var(--acc); }
-  .res { padding:10px 12px; border-bottom:1px solid #2a323d; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:10px; border-radius:8px; margin-top:2px; transition:background .15s; }
-  .res:hover, .res:active { background:#242b35; }
-  .res:last-child { border-bottom:0; }
-  .res-icon { font-size:16px; opacity:.85; }
-  .res-body { flex:1; min-width:0; }
-  .res-title { font-weight:600; color:#e8edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .res-sub { font-size:12px; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
-  .big { display:flex; align-items:center; gap:16px; }
-  #arrow { font-size:64px; width:70px; text-align:center; line-height:1; }
-  #dist { font-size:38px; font-weight:700; }
-  #street { color:var(--mut); font-size:16px; font-weight:500; }
-  .mut { color:var(--mut); font-size:13px; }
-  code { font-family:ui-monospace, Menlo, monospace; font-size:13px; color:var(--mut); }
-  #map { width:100%; height:260px; border-radius:12px; margin-top:10px; background:#111; z-index:1; }
-  .pac-container { z-index: 9999 !important; background-color:#181d25; border:1px solid #2a323d; font-family:inherit; }
-  .pac-item { color:#e8edf3; border-top:1px solid #2a323d; padding:8px; font-size:14px; }
-  .pac-item:hover { background-color:#2a323d; }
-  .pac-item-query { color:#3ea6ff; font-size:14px; }
-  .pac-matched { font-weight:bold; color:#fff; }
-</style>
+  <!-- Leaflet CSS & JS (Bản đồ dự phòng miễn phí) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Giao diện Chế độ sáng (High-Contrast Light Theme) -->
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-<!-- KẾT NỐI BLUETOOTH -->
-<div class="card">
-  <h1>
-    <span>MotoNav</span>
-    <span id="bleState" class="pill warn">Chưa kết nối màn hình</span>
-  </h1>
-  <div class="row">
-    <button id="btnConn">Kết nối MotoNav</button>
-    <button id="btnConnAll" class="sec" title="Dùng khi không tìm thấy tên MotoNav">Quét tất cả BLE</button>
-  </div>
-  <div id="bleMsg" class="mut" style="margin-top:6px">Mẹo: Bật nguồn BW16 trước khi bấm kết nối.</div>
-</div>
-
-<!-- ĐIỀU HƯỚNG VÀ BẢN ĐỒ -->
-<div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-    <span id="engineBadge" class="pill info">Bản đồ: Đang kiểm tra…</span>
-    <button id="btnToggleKey" class="sec" style="padding:6px 10px; font-size:13px;">Cài Google Key</button>
-  </div>
-
-  <!-- Hộp cấu hình Google Maps API Key -->
-  <div id="keyBox" style="display:none; background:#0e1116; border:1px solid #2a323d; border-radius:10px; padding:10px; margin-bottom:10px;">
-    <div style="font-size:13px; margin-bottom:6px; color:var(--mut);">
-      Dán Google Maps API Key vào đây (có bật Places API, Directions API, Maps JS API):
+  <!-- KẾT NỐI BLUETOOTH MÀN HÌNH BW16 -->
+  <div class="card">
+    <h1>
+      <span>MotoNav</span>
+      <span id="bleState" class="pill warn">Chưa kết nối màn hình</span>
+    </h1>
+    <div class="row">
+      <button id="btnConn">Kết nối MotoNav</button>
+      <button id="btnConnAll" class="sec" title="Dùng khi không tìm thấy tên MotoNav">Quét tất cả BLE</button>
     </div>
-    <input id="keyInput" placeholder="AIzaSy..." style="font-size:14px; padding:8px;">
-    <div class="row" style="margin-top:8px;">
-      <button id="btnSaveKey" style="padding:8px 10px; font-size:14px;">Lưu & Dùng Google</button>
-      <button id="btnClearKey" class="sec" style="padding:8px 10px; font-size:14px;">Dùng bản đồ miễn phí</button>
+    <div id="bleMsg" class="mut" style="margin-top:6px">Mẹo: Bật nguồn BW16 trước khi bấm kết nối.</div>
+  </div>
+
+  <!-- ĐIỀU HƯỚNG VÀ BẢN ĐỒ -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <span id="engineBadge" class="pill info">Bản đồ: Đang kiểm tra…</span>
+      <button id="btnToggleKey" class="sec" style="padding:6px 10px; font-size:13px;">Cài Google Key</button>
     </div>
-  </div>
 
-  <input id="q" placeholder="Nhập địa chỉ, tên quán, toạ độ..." enterkeyhint="search" autocomplete="off">
-  <div class="row"><button id="btnSearch" class="sec">Tìm kiếm</button></div>
-  <div id="results"></div>
-  <div id="picked" class="mut" style="margin-top:6px"></div>
-
-  <div class="row" style="margin-top:10px;">
-    <button id="btnStart">Bắt đầu dẫn đường</button>
-    <button id="btnStop" class="bad">Dừng</button>
-  </div>
-  <div id="msg" class="mut" style="margin-top:8px"></div>
-
-  <!-- Bản đồ trực quan -->
-  <div id="map"></div>
-</div>
-
-<!-- MÀN HÌNH CHỈ HƯỚNG THỜI GIAN THỰC -->
-<div class="card">
-  <div class="big">
-    <div id="arrow">–</div>
-    <div style="flex:1;">
-      <div id="dist">--</div>
-      <div id="street">Chưa dẫn đường</div>
-    </div>
-  </div>
-  <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
-    <span>Gửi BLE: <code id="sent">-</code></span>
-    <button id="btnLocate" class="sec" style="padding:6px 10px; font-size:12px;">Định vị tôi</button>
-  </div>
-</div>
-
-<!-- KIỂM TRA MÀN HÌNH OLED -->
-<div class="card">
-  <div class="mut" style="margin-bottom:6px">Thử nghiệm gửi hình ảnh lên OLED</div>
-  <div class="row">
-    <button class="sec" data-t="L|250m|Nguyen Hue">Trái</button>
-    <button class="sec" data-t="R|1.2km|Le Loi">Phải</button>
-    <button class="sec" data-t="S|800m|Dien Bien Phu">Thẳng</button>
-  </div>
-  <div class="row">
-    <button class="sec" data-t="U|50m|Pasteur">Quay đầu</button>
-    <button class="sec" data-t="A|30m|Diem den">Đến nơi</button>
-    <button class="sec" data-t="X||">Tắt</button>
-  </div>
-</div>
-
-<script>
-const SVC = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-const RXU = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
-const $ = id => document.getElementById(id);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const enc = new TextEncoder();
-
-let device = null, rxChar = null;
-let dest = null, routeLine = [], steps = [], k = 0;
-let navigating = false, rerouting = false, offCount = 0;
-let watchId = null, keepTimer = null, lastPos = null, wake = null;
-let lastMsg = '', curMsg = '';
-let currentHeading = 0;
-
-// Trạng thái Engine: 'google' hoặc 'osm'
-let mapEngine = 'osm';
-let gMap = null, gDirectionsService = null, gDirectionsRenderer = null, gUserMarker = null, gAutocomplete = null;
-let lMap = null, lRouteLine = null, lUserMarker = null, lDestMarker = null;
-
-// ================= BLE =================
-function setBle(text, ok) {
-  $('bleState').textContent = ok ? '🟢 ĐÃ KẾT NỐI' : 'Chưa kết nối màn hình';
-  $('bleState').className = 'pill ' + (ok ? 'ok' : 'warn');
-  $('bleMsg').textContent = text;
-  if (ok) {
-    $('btnConn').textContent = '✅ Đã kết nối MotoNav (Bấm để ngắt)';
-    $('btnConn').style.background = 'var(--ok)';
-    $('btnConn').style.color = '#fff';
-    $('btnConnAll').style.display = 'none';
-  } else {
-    $('btnConn').textContent = 'Kết nối MotoNav';
-    $('btnConn').style.background = 'var(--acc)';
-    $('btnConn').style.color = '#04121f';
-    $('btnConnAll').style.display = 'block';
-  }
-}
-
-let blePingTimer = null;
-let lastGpsFix = 0;
-let gpsWatchdogTimer = null;
-
-async function openGatt() {
-  const server = await device.gatt.connect();
-  const svc = await server.getPrimaryService(SVC);
-  rxChar = await svc.getCharacteristic(RXU);
-  lastMsg = '';
-  setBle('Đã kết nối thành công với ' + (device.name || 'MotoNav'), true);
-  // Gửi xác nhận kết nối lên OLED ngay lập tức
-  send('C|OK|Da ket noi\n', true);
-
-  // Giữ nhịp tim BLE (Heartbeat) liên tục mỗi 2.5 giây để tránh iOS / BW16 ngắt kết nối do rảnh rỗi
-  clearInterval(blePingTimer);
-  blePingTimer = setInterval(() => {
-    if (rxChar) {
-      if (navigating && curMsg) send(curMsg, false);
-      else sendRaw('K||\n');
-    }
-  }, 2500);
-
-  // Kích hoạt giữ sáng màn hình
-  lockScreen();
-}
-
-function onDisconnected() {
-  rxChar = null;
-  clearInterval(blePingTimer);
-  setBle('Mất kết nối BLE, đang tự kết nối lại…', false);
-  const retry = async () => {
-    if (rxChar || !device) return;
-    try { await openGatt(); } catch (e) { setTimeout(retry, 2500); }
-  };
-  setTimeout(retry, 1000);
-}
-
-async function doConnectBle(acceptAll = false) {
-  if (!navigator.bluetooth) {
-    setBle('Trình duyệt không hỗ trợ Web Bluetooth. Hãy mở trang này bằng Bluefy trên iPhone.', false);
-    return;
-  }
-  try {
-    setBle('Đang mở hộp thoại quét…', false);
-    const options = acceptAll
-      ? { acceptAllDevices: true, optionalServices: [SVC] }
-      : { filters: [{ namePrefix: 'MotoNav' }, { name: 'MotoNav' }, { services: [SVC] }], optionalServices: [SVC] };
-
-    device = await navigator.bluetooth.requestDevice(options);
-    device.addEventListener('gattserverdisconnected', onDisconnected);
-    await openGatt();
-  } catch (e) {
-    if (e.name === 'NotFoundError' && !acceptAll) {
-      setBle("Không lọc được tên 'MotoNav'. Hãy thử bấm nút 'Quét tất cả BLE'.", false);
-    } else {
-      setBle('Lỗi: ' + e.message, false);
-    }
-  }
-}
-
-$('btnConn').onclick = () => {
-  if (device && device.gatt && device.gatt.connected) {
-    device.gatt.disconnect();
-    setBle('Đã ngắt kết nối', false);
-    return;
-  }
-  doConnectBle(false);
-};
-$('btnConnAll').onclick = () => doConnectBle(true);
-
-let busy = false, queued = null;
-async function sendRaw(m) {
-  if (!rxChar) return;
-  if (busy) { queued = m; return; }
-  busy = true;
-  try {
-    const bytes = enc.encode(m);
-    for (let i = 0; i < bytes.length; i += 20) {
-      const part = bytes.slice(i, i + 20);
-      if (rxChar.writeValueWithoutResponse) await rxChar.writeValueWithoutResponse(part);
-      else await rxChar.writeValue(part);
-      if (i + 20 < bytes.length) await sleep(15);
-    }
-  } catch (e) { console.warn('Lỗi gửi BLE:', e); }
-  busy = false;
-  if (queued) { const q = queued; queued = null; sendRaw(q); }
-}
-
-function send(m, force) {
-  $('sent').textContent = m.trim() || '-';
-  if (m === lastMsg && !force) return;
-  lastMsg = m;
-  sendRaw(m);
-}
-
-document.querySelectorAll('button[data-t]').forEach(b => {
-  b.onclick = () => send(b.dataset.t + '\n', true);
-});
-
-// ================= HÌNH HỌC VÀ TIỆN ÍCH =================
-const R = 6371000, rad = d => d * Math.PI / 180;
-function hav(a, b) { // a, b = [lon, lat]
-  const dLat = rad(b[1] - a[1]), dLon = rad(b[0] - a[0]);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a[1])) * Math.cos(rad(b[1])) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
-function alongLine(p, coords) {
-  if (!coords || coords.length < 2) return { off: 0, rem: 0 };
-  const kx = Math.cos(rad(p[1])) * rad(1) * R, ky = rad(1) * R;
-  const X = c => [(c[0] - p[0]) * kx, (c[1] - p[1]) * ky];
-  let best = Infinity, bi = 0, bt = 0;
-  for (let i = 0; i < coords.length - 1; i++) {
-    const a = X(coords[i]), b = X(coords[i + 1]);
-    const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
-    let t = l2 ? (-a[0] * dx - a[1] * dy) / l2 : 0;
-    t = Math.max(0, Math.min(1, t));
-    const d = Math.hypot(a[0] + t * dx, a[1] + t * dy);
-    if (d < best) { best = d; bi = i; bt = t; }
-  }
-  let rem = 0;
-  const a = X(coords[bi]), b = X(coords[bi + 1]);
-  rem += (1 - bt) * Math.hypot(b[0] - a[0], b[1] - a[1]);
-  for (let i = bi + 1; i < coords.length - 1; i++) rem += hav(coords[i], coords[i + 1]);
-  return { off: best, rem };
-}
-
-const ascii = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
-const fmt = d => d >= 1000 ? (d / 1000).toFixed(1) + 'km' : (Math.round(d / 10) * 10) + 'm';
-
-function setMsg(t) { $('msg').textContent = t; }
-
-function render(dir, dist, street) {
-  const g = { L: '⬅', R: '➡', S: '⬆', U: '↩', A: '⚑', X: '–' };
-  $('arrow').textContent = g[dir] || '–';
-  $('dist').textContent = dist || '--';
-  $('street').textContent = street || '';
-}
-
-// ================= GOOGLE MAPS API & DỰ PHÒNG OSM =================
-function getStoredKey() { return localStorage.getItem('motonav_gkey') || ''; }
-
-$('btnToggleKey').onclick = () => {
-  const box = $('keyBox');
-  box.style.display = box.style.display === 'none' ? 'block' : 'none';
-  if (box.style.display === 'block') $('keyInput').value = getStoredKey();
-};
-
-$('btnSaveKey').onclick = () => {
-  const k = $('keyInput').value.trim();
-  if (!k) { alert('Vui lòng dán Google Maps API Key'); return; }
-  localStorage.setItem('motonav_gkey', k);
-  location.reload();
-};
-
-$('btnClearKey').onclick = () => {
-  localStorage.removeItem('motonav_gkey');
-  location.reload();
-};
-
-function initEngine() {
-  const key = getStoredKey();
-  if (key) {
-    loadGoogleSdk(key).then(() => {
-      mapEngine = 'google';
-      $('engineBadge').textContent = 'Bản đồ: Google Maps 🟢';
-      $('engineBadge').className = 'pill ok';
-      initGoogleMap();
-    }).catch(err => {
-      console.warn('Không tải được Google Maps SDK:', err);
-      $('engineBadge').textContent = 'Google lỗi -> Dùng OSM 🟡';
-      $('engineBadge').className = 'pill warn';
-      initLeafletMap();
-    });
-  } else {
-    mapEngine = 'osm';
-    $('engineBadge').textContent = 'Bản đồ: OpenStreetMap 🟡';
-    $('engineBadge').className = 'pill warn';
-    initLeafletMap();
-  }
-}
-
-function loadGoogleSdk(apiKey) {
-  return new Promise((resolve, reject) => {
-    if (window.google && window.google.maps) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=__gmapsInit`;
-    s.async = true; s.defer = true;
-    window.__gmapsInit = () => resolve();
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
-
-// Khởi tạo Google Map
-function initGoogleMap() {
-  const defaultPos = lastPos ? { lat: lastPos[1], lng: lastPos[0] } : { lat: 10.7769, lng: 106.7009 };
-  gMap = new google.maps.Map($('map'), {
-    center: defaultPos,
-    zoom: 16,
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false,
-    styles: [ { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-              { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-              { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] } ]
-  });
-
-  gDirectionsService = new google.maps.DirectionsService();
-  gDirectionsRenderer = new google.maps.DirectionsRenderer({
-    map: gMap,
-    suppressMarkers: false,
-    polylineOptions: { strokeColor: '#3ea6ff', strokeWeight: 6 }
-  });
-
-  gUserMarker = new google.maps.Marker({
-    map: gMap,
-    position: defaultPos,
-    title: 'Vị trí của bạn',
-    icon: {
-      path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-      scale: 5,
-      fillColor: '#3ea6ff',
-      fillOpacity: 1,
-      strokeColor: '#ffffff',
-      strokeWeight: 2,
-      rotation: 0
-    }
-  });
-
-  // Tích hợp Google Places Autocomplete vào ô tìm kiếm (ưu tiên Việt Nam)
-  gAutocomplete = new google.maps.places.Autocomplete($('q'), {
-    fields: ['geometry', 'name', 'formatted_address'],
-    componentRestrictions: { country: 'vn' }
-  });
-  gAutocomplete.addListener('place_changed', () => {
-    const place = gAutocomplete.getPlace();
-    if (!place.geometry || !place.geometry.location) {
-      setMsg('Không lấy được toạ độ của địa điểm này');
-      return;
-    }
-    const lat = place.geometry.location.lat();
-    const lon = place.geometry.location.lng();
-    pick({
-      name: place.name || place.formatted_address,
-      lat, lon,
-      gLocation: place.geometry.location
-    });
-    gMap.panTo(place.geometry.location);
-  });
-}
-
-// Khởi tạo Leaflet Map (dự phòng miễn phí)
-function initLeafletMap() {
-  const defaultPos = lastPos ? [lastPos[1], lastPos[0]] : [10.7769, 106.7009];
-  lMap = L.map('map').setView(defaultPos, 15);
-
-  // Sử dụng Esri World Street Map: Bản đồ đường phố miễn phí 100%, không cần key, không watermark
-  const esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    attribution: 'Tiles © Esri'
-  });
-
-  // Dự phòng OSM France HOT
-  const hotBackup = L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
-    subdomains: ['a', 'b', 'c'],
-    maxZoom: 19,
-    attribution: '© OpenStreetMap, OSM France'
-  });
-
-  esriLayer.on('tileerror', () => {
-    if (!lMap.hasLayer(hotBackup)) {
-      lMap.removeLayer(esriLayer);
-      hotBackup.addTo(lMap);
-    }
-  });
-
-  esriLayer.addTo(lMap);
-
-  lUserMarker = L.circleMarker(defaultPos, {
-    radius: 8, fillColor: '#3ea6ff', color: '#fff', weight: 2, fillOpacity: 1
-  }).addTo(lMap);
-}
-
-// ================= TÌM KIẾM ĐỊA CHỈ =================
-function pick(d) {
-  dest = d;
-  $('results').innerHTML = '';
-  $('picked').textContent = 'Điểm đến: ' + d.name;
-  setMsg('Đã chọn điểm đến. Bấm "Bắt đầu dẫn đường".');
-
-  if (mapEngine === 'google' && gMap) {
-    const pt = d.gLocation || new google.maps.LatLng(d.lat, d.lon);
-    gMap.panTo(pt);
-  } else if (lMap) {
-    if (lDestMarker) lMap.removeLayer(lDestMarker);
-    lDestMarker = L.marker([d.lat, d.lon]).addTo(lMap).bindPopup(d.name).openPopup();
-    lMap.panTo([d.lat, d.lon]);
-  }
-}
-
-// ================= GỢI Ý ĐỊA CHỈ OPENSTREETMAP (AUTOCOMPLETE KHI GÕ) =================
-let suggestTimer = null;
-
-function renderOsmSuggestions(items) {
-  const box = $('results');
-  box.innerHTML = '';
-  if (!items || !items.length) {
-    box.innerHTML = '<div class="mut" style="padding:8px 4px;">Không tìm thấy địa điểm gợi ý</div>';
-    return;
-  }
-  items.forEach(it => {
-    const div = document.createElement('div');
-    div.className = 'res';
-    div.innerHTML = `
-      <span class="res-icon">📍</span>
-      <div class="res-body">
-        <div class="res-title">${it.title}</div>
-        <div class="res-sub">${it.sub || it.fullName}</div>
+    <!-- Hộp cấu hình Google Maps API Key -->
+    <div id="keyBox" style="display:none; background:#f1f5f9; border:1px solid var(--card-border); border-radius:10px; padding:10px; margin-bottom:10px;">
+      <div style="font-size:13px; margin-bottom:6px; color:var(--mut);">
+        Dán Google Maps API Key vào đây (có bật Places API, Directions API, Maps JS API):
       </div>
-    `;
-    div.onclick = () => {
-      $('q').value = it.title;
-      pick({
-        name: it.fullName,
-        lat: it.lat,
-        lon: it.lon,
-        gLocation: window.google ? new google.maps.LatLng(it.lat, it.lon) : null
-      });
-      box.innerHTML = '';
-    };
-    box.appendChild(div);
-  });
-}
+      <input id="keyInput" placeholder="AIzaSy..." style="font-size:14px; padding:8px;">
+      <div class="row" style="margin-top:8px;">
+        <button id="btnSaveKey" style="padding:8px 10px; font-size:14px;">Lưu & Dùng Google</button>
+        <button id="btnClearKey" class="sec" style="padding:8px 10px; font-size:14px;">Dùng bản đồ miễn phí</button>
+      </div>
+    </div>
 
-async function fetchOsmSuggestions(q) {
-  if (!q || q.length < 2) {
-    $('results').innerHTML = '';
-    return;
-  }
+    <input id="q" placeholder="Nhập địa chỉ, tên quán, toạ độ..." enterkeyhint="search" autocomplete="off">
+    <div class="row"><button id="btnSearch" class="sec">Tìm kiếm</button></div>
+    <div id="results"></div>
+    <div id="picked" class="mut" style="margin-top:6px"></div>
 
-  // 1. Thử Photon API (dữ liệu OpenStreetMap, chuyên autocomplete thời gian thực cực nhanh)
-  try {
-    let biasParam = '';
-    if (lastPos) biasParam = `&lat=${lastPos[1]}&lon=${lastPos[0]}`;
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6${biasParam}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data && data.features && data.features.length) {
-      const items = data.features.map(f => {
-        const p = f.properties;
-        const coords = f.geometry.coordinates; // [lon, lat]
-        const title = p.name || (p.housenumber ? p.housenumber + ' ' : '') + (p.street || 'Địa điểm');
-        const parts = [p.housenumber, p.street, p.district, p.city || p.state, p.country].filter(Boolean);
-        const sub = parts.length ? parts.join(', ') : (p.county || p.country || '');
-        return {
-          title, sub,
-          fullName: title + (sub ? ', ' + sub : ''),
-          lat: coords[1],
-          lon: coords[0]
-        };
-      });
-      renderOsmSuggestions(items);
-      return;
-    }
-  } catch (err) {
-    console.warn('Photon error, chuyển sang Nominatim:', err);
-  }
+    <!-- GỢI Ý NHIỀU TUYẾN ĐƯỜNG (GOOGLE MAPS & OSRM) -->
+    <div id="routeBox" style="display:none; margin-top:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span style="font-size:13px; font-weight:600; color:var(--mut);">GỢI Ý TUYẾN ĐƯỜNG:</span>
+        <span id="routeCount" class="pill" style="font-size:11px; padding:2px 8px;">0 tuyến</span>
+      </div>
+      <div id="routeList" class="route-list"></div>
+    </div>
 
-  // 2. Dự phòng Nominatim OpenStreetMap
-  try {
-    const bias = lastPos ? `&viewbox=${lastPos[0] - .6},${lastPos[1] + .6},${lastPos[0] + .6},${lastPos[1] - .6}` : '';
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=vi&q=${encodeURIComponent(q)}${bias}`);
-    const list = await r.json();
-    if (list && list.length) {
-      const items = list.map(it => {
-        const parts = it.display_name.split(',');
-        const title = parts[0].trim();
-        const sub = parts.slice(1).join(',').trim();
-        return {
-          title, sub,
-          fullName: it.display_name,
-          lat: +it.lat,
-          lon: +it.lon
-        };
-      });
-      renderOsmSuggestions(items);
-    } else {
-      $('results').innerHTML = '<div class="mut" style="padding:8px 4px;">Không tìm thấy địa điểm phù hợp</div>';
-    }
-  } catch (e) {
-    console.warn('Nominatim error:', e);
-  }
-}
+    <div class="row" style="margin-top:10px;">
+      <button id="btnStart">Bắt đầu dẫn đường</button>
+      <button id="btnStop" class="bad">Dừng</button>
+    </div>
+    <div id="msg" class="mut" style="margin-top:8px"></div>
 
-// Bắt sự kiện gõ phím để gợi ý tức thì
-$('q').addEventListener('input', () => {
-  if (mapEngine === 'google') return; // Chế độ Google thì Google Autocomplete tự động xử lý
-  clearTimeout(suggestTimer);
-  const val = $('q').value.trim();
-  if (val.length < 2) {
-    $('results').innerHTML = '';
-    return;
-  }
-  suggestTimer = setTimeout(() => {
-    fetchOsmSuggestions(val);
-  }, 280);
-});
+    <!-- Bản đồ trực quan -->
+    <div id="map"></div>
+  </div>
 
-// Khi nhấn Enter trong ô tìm kiếm
-$('q').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    $('btnSearch').click();
-  }
-});
+  <!-- MÀN HÌNH CHỈ HƯỚNG THỜI GIAN THỰC (HUD) -->
+  <div class="card">
+    <div class="big">
+      <div id="arrow">–</div>
+      <div style="flex:1;">
+        <div id="dist">--</div>
+        <div id="street">Chưa dẫn đường</div>
+      </div>
+    </div>
+    <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+      <span>Gửi BLE: <code id="sent">-</code></span>
+      <button id="btnLocate" class="sec" style="padding:6px 10px; font-size:12px;">Định vị tôi</button>
+    </div>
+  </div>
 
-$('btnSearch').onclick = async () => {
-  const q = $('q').value.trim();
-  if (!q) return;
+  <!-- THỬ NGHIỆM MÀN HÌNH OLED BW16 -->
+  <div class="card">
+    <div class="mut" style="margin-bottom:6px">Thử nghiệm gửi hình ảnh lên OLED</div>
+    <div class="row">
+      <button class="sec" data-t="L|250m|Nguyen Hue">Trái</button>
+      <button class="sec" data-t="R|1.2km|Le Loi">Phải</button>
+      <button class="sec" data-t="S|800m|Dien Bien Phu">Thẳng</button>
+    </div>
+    <div class="row">
+      <button class="sec" data-t="U|50m|Pasteur">Quay đầu</button>
+      <button class="sec" data-t="A|30m|Diem den">Đến nơi</button>
+      <button class="sec" data-t="X||">Tắt</button>
+    </div>
+  </div>
 
-  // 1. Kiểm tra nếu là toạ độ dạng "10.7769, 106.7009"
-  const mCoord = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
-  if (mCoord) {
-    const lat = +mCoord[1], lon = +mCoord[2];
-    pick({
-      name: `Toạ độ ${lat.toFixed(5)}, ${lon.toFixed(5)}`, lat, lon,
-      gLocation: window.google ? new google.maps.LatLng(lat, lon) : null
-    });
-    return;
-  }
-
-  // 2. Kiểm tra nếu là link Google Maps (chứa @lat,lon hoặc q=lat,lon)
-  const mUrl = q.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || q.match(/[?&](?:q|query)=(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (mUrl) {
-    const lat = +mUrl[1], lon = +mUrl[2];
-    pick({
-      name: `Vị trí từ Google Maps (${lat.toFixed(5)}, ${lon.toFixed(5)})`, lat, lon,
-      gLocation: window.google ? new google.maps.LatLng(lat, lon) : null
-    });
-    return;
-  }
-
-  setMsg('Đang tìm kiếm…');
-
-  // 3. Nếu đang ở chế độ Google Maps: Dùng Google Geocoder để tìm địa chỉ chuẩn xác
-  if (mapEngine === 'google' && window.google && google.maps && google.maps.Geocoder) {
-    const geocoder = new google.maps.Geocoder();
-    geocoder.geocode({ address: q, componentRestrictions: { country: 'VN' } }, (results, status) => {
-      const box = $('results');
-      box.innerHTML = '';
-      if (status === 'OK' && results && results.length) {
-        results.slice(0, 5).forEach(it => {
-          const div = document.createElement('div');
-          div.className = 'res';
-          div.innerHTML = `
-            <span class="res-icon">📍</span>
-            <div class="res-body">
-              <div class="res-title">${it.formatted_address.split(',')[0]}</div>
-              <div class="res-sub">${it.formatted_address}</div>
-            </div>
-          `;
-          div.onclick = () => {
-            const loc = it.geometry.location;
-            pick({
-              name: it.formatted_address,
-              lat: loc.lat(),
-              lon: loc.lng(),
-              gLocation: loc
-            });
-          };
-          box.appendChild(div);
-        });
-        setMsg('Chọn một kết quả của Google bên dưới');
-      } else {
-        setMsg('Google Maps không tìm thấy địa chỉ này. Thử gõ rõ hơn.');
-      }
-    });
-    return;
-  }
-
-  // 4. Chế độ OpenStreetMap
-  fetchOsmSuggestions(q);
-};
-
-// ================= TÍNH TOÁN LỘ TRÌNH (GOOGLE & OSRM) =================
-function dirFromGoogleStep(step) {
-  const m = (step.maneuver || '').toLowerCase();
-  if (m.includes('uturn')) return 'U';
-  if (m.includes('left')) return 'L';
-  if (m.includes('right')) return 'R';
-  if (m.includes('straight')) return 'S';
-  
-  const text = (step.instructions || '').toLowerCase();
-  if (text.includes('quay đầu') || text.includes('u-turn')) return 'U';
-  if (text.includes('trái') || text.includes('left')) return 'L';
-  if (text.includes('phải') || text.includes('right')) return 'R';
-  return 'S';
-}
-
-function streetFromGoogleStep(step) {
-  if (!step || !step.instructions) return '';
-  const bolds = [...step.instructions.matchAll(/<b>(.*?)<\/b>/g)].map(x => x[1]);
-  let st = '';
-  if (bolds.length >= 2) st = bolds[bolds.length - 1];
-  else if (bolds.length === 1) st = bolds[0];
-  else st = step.instructions.replace(/<[^>]*>/g, '').trim();
-  return ascii(st).slice(0, 15);
-}
-
-function dirFromOsrm(m) {
-  if (m.type === 'arrive') return 'A';
-  const mod = m.modifier || '';
-  if (mod === 'uturn') return 'U';
-  if (mod.includes('left')) return 'L';
-  if (mod.includes('right')) return 'R';
-  return 'S';
-}
-
-async function buildRoute(from) { // from = [lon, lat]
-  if (mapEngine === 'google' && gDirectionsService) {
-    const origin = new google.maps.LatLng(from[1], from[0]);
-    const destination = dest.gLocation || new google.maps.LatLng(dest.lat, dest.lon);
-    
-    return new Promise((resolve, reject) => {
-      gDirectionsService.route({
-        origin, destination,
-        travelMode: google.maps.TravelMode.DRIVING
-      }, (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK) {
-          gDirectionsRenderer.setDirections(result);
-          const route = result.routes[0];
-          
-          // Chuyển overview_path thành mảng [lon, lat] để đo khoảng cách lệch đường
-          routeLine = route.overview_path.map(p => [p.lng(), p.lat()]);
-          steps = route.legs[0].steps;
-          k = 0; offCount = 0;
-          resolve();
-        } else {
-          reject(new Error('Google Maps không tìm được đường: ' + status));
-        }
-      });
-    });
-  } else {
-    // Chế độ OpenStreetMap OSRM
-    const url = `https://router.project-osrm.org/route/v1/driving/${from[0]},${from[1]};${dest.lon},${dest.lat}?steps=true&geometries=geojson&overview=full`;
-    const j = await (await fetch(url)).json();
-    if (j.code !== 'Ok') throw new Error(j.message || j.code);
-    const rt = j.routes[0];
-    routeLine = rt.geometry.coordinates;
-    steps = rt.legs[0].steps;
-    k = 0; offCount = 0;
-
-    // Vẽ lên Leaflet
-    if (lMap) {
-      if (lRouteLine) lMap.removeLayer(lRouteLine);
-      const latlngs = routeLine.map(c => [c[1], c[0]]);
-      lRouteLine = L.polyline(latlngs, { color: '#3ea6ff', weight: 6 }).addTo(lMap);
-      lMap.fitBounds(lRouteLine.getBounds(), { padding: [30, 30] });
-    }
-  }
-}
-
-// Tự động tính lại đường khi đi sai (Reroute)
-async function reroute(p) {
-  rerouting = true;
-  setMsg('Đang tự động điều chỉnh lộ trình theo GPS…');
-  try {
-    await buildRoute(p);
-    setMsg('Đã cập nhật lại đường đi');
-  } catch (e) {
-    setMsg('Lỗi tính lại đường: ' + e.message);
-  }
-  rerouting = false;
-}
-
-// ================= THEO DÕI VỊ TRÍ GPS VÀ DẪN ĐƯỜNG =================
-function onPos(pos) {
-  lastGpsFix = Date.now();
-  if (navigating) setMsg('Đang dẫn đường');
-  if (pos.coords.accuracy > 80) return; // Bỏ qua điểm quá nhiễu
-  const p = [pos.coords.longitude, pos.coords.latitude];
-  const heading = pos.coords.heading || currentHeading || 0;
-  lastPos = p;
-
-  // Cập nhật vị trí lên bản đồ
-  if (mapEngine === 'google' && gMap && gUserMarker) {
-    const latLng = new google.maps.LatLng(p[1], p[0]);
-    gUserMarker.setPosition(latLng);
-    if (pos.coords.heading !== null && !isNaN(pos.coords.heading)) {
-      gUserMarker.setIcon({
-        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        scale: 5, fillColor: '#3ea6ff', fillOpacity: 1,
-        strokeColor: '#ffffff', strokeWeight: 2,
-        rotation: pos.coords.heading
-      });
-    }
-    if (navigating) gMap.panTo(latLng);
-  } else if (lMap && lUserMarker) {
-    lUserMarker.setLatLng([p[1], p[0]]);
-    if (navigating) lMap.panTo([p[1], p[0]]);
-  }
-
-  if (!navigating || !steps || !steps.length) return;
-
-  // Xử lý dẫn đường theo Google Maps
-  if (mapEngine === 'google') {
-    // Kiểm tra hoàn thành bước hiện tại (< 25m tới điểm kết thúc của bước)
-    while (k < steps.length - 1) {
-      const endPt = [steps[k].end_location.lng(), steps[k].end_location.lat()];
-      if (hav(p, endPt) < 25) k++;
-      else break;
-    }
-
-    if (k >= steps.length) {
-      const m = 'A|0m|' + ascii(dest.name).slice(0, 15) + '\n';
-      curMsg = m; render('A', '0m', 'Da den noi'); send(m);
-      setMsg('Đã đến nơi!');
-      return;
-    }
-
-    const curStep = steps[k];
-    const endPt = [curStep.end_location.lng(), curStep.end_location.lat()];
-    const d = hav(p, endPt);
-    const dir = dirFromGoogleStep(curStep);
-    const st = streetFromGoogleStep(curStep) || 'Diem den';
-    const m = `${dir}|${fmt(d)}|${st}\n`;
-    curMsg = m;
-    render(dir, fmt(d), st);
-    send(m);
-  } else {
-    // Xử lý dẫn đường theo OSRM
-    while (k < steps.length - 1 && hav(p, steps[k + 1].maneuver.location) < 25) k++;
-
-    if (k >= steps.length - 1) {
-      const m = 'A|0m|' + ascii(dest.name).slice(0, 15) + '\n';
-      curMsg = m; render('A', '0m', 'Da den noi'); send(m);
-      setMsg('Đã đến nơi!');
-      return;
-    }
-
-    const stepLine = steps[k].geometry.coordinates;
-    const al = alongLine(p, stepLine);
-    const up = steps[k + 1];
-    const d = al.off < 100 ? al.rem : hav(p, up.maneuver.location);
-    const dir = dirFromOsrm(up.maneuver);
-    const st = ascii(up.name || up.ref || '').slice(0, 15);
-    const m = `${dir}|${fmt(d)}|${st}\n`;
-    curMsg = m;
-    render(dir, fmt(d), st);
-    send(m);
-  }
-
-  // TỰ ĐỘNG ĐIỀU CHỈNH HƯỚNG ĐI KHI LỆCH TUYẾN ĐƯỜNG:
-  // Nếu lệch khỏi tuyến đường > 35m trong 2 nhịp GPS liên tiếp -> Reroute ngay lập tức
-  const offTrack = alongLine(p, routeLine).off;
-  if (offTrack > 35) offCount++; else offCount = 0;
-  if (offCount >= 2 && !rerouting) reroute(p);
-}
-
-async function lockScreen() {
-  try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch (e) {}
-}
-document.addEventListener('visibilitychange', () => {
-  if (navigating && document.visibilityState === 'visible') lockScreen();
-});
-
-$('btnLocate').onclick = () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(p => {
-      lastPos = [p.coords.longitude, p.coords.latitude];
-      if (mapEngine === 'google' && gMap) gMap.panTo({ lat: lastPos[1], lng: lastPos[0] });
-      else if (lMap) lMap.panTo([lastPos[1], lastPos[0]]);
-      setMsg('Đã lấy vị trí GPS hiện tại');
-    }, e => onGpsError(e), { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 });
-  }
-};
-
-function onGpsError(e) {
-  console.warn('GPS Error:', e.code, e.message);
-  if (e.code === 3) {
-    setMsg('Đang tìm vệ tinh GPS… (Nếu ở trong nhà hãy ra gần cửa sổ hoặc ra ngoài trời)');
-  } else if (e.code === 1) {
-    setMsg('GPS bị chặn: Vui lòng cho phép quyền Vị trí trong Cài đặt iPhone.');
-  } else {
-    setMsg('Tín hiệu GPS yếu: ' + e.message);
-  }
-}
-
-function startGpsWatch() {
-  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-  watchId = navigator.geolocation.watchPosition(onPos, onGpsError, {
-    enableHighAccuracy: true,
-    maximumAge: 3000, // Cho phép dùng vị trí cách đây 3s để tránh timeout tức thì
-    timeout: 10000    // Kiểm tra mỗi 10 giây
-  });
-}
-
-$('btnStart').onclick = async () => {
-  if (!dest) { setMsg('Hãy tìm và chọn điểm đến trước'); return; }
-  try {
-    let p = lastPos;
-    if (!p) {
-      setMsg('Đang lấy toạ độ GPS…');
-      const pos = await new Promise((ok, err) =>
-        navigator.geolocation.getCurrentPosition(ok, err, { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }));
-      p = [pos.coords.longitude, pos.coords.latitude];
-      lastPos = p;
-    }
-    setMsg('Đang tính lộ trình…');
-    await buildRoute(p);
-    navigating = true;
-    lastGpsFix = Date.now();
-    startGpsWatch();
-
-    // Watchdog: Nếu quá 15s không có tín hiệu GPS mới, tự khởi động lại watchPosition
-    clearInterval(gpsWatchdogTimer);
-    gpsWatchdogTimer = setInterval(() => {
-      if (navigating && Date.now() - lastGpsFix > 15000) {
-        console.warn('GPS Watchdog: Tự động khởi động lại bộ thu GPS…');
-        startGpsWatch();
-      }
-    }, 5000);
-
-    lockScreen();
-    setMsg('Đang dẫn đường');
-  } catch (e) { setMsg('Lỗi: ' + e.message); }
-};
-
-$('btnStop').onclick = () => {
-  navigating = false;
-  if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-  clearInterval(gpsWatchdogTimer);
-  if (wake) { wake.release().catch(() => {}); wake = null; }
-  send('X||\n', true);
-  render('X', '--', 'Đã dừng');
-  setMsg('Đã dừng dẫn đường');
-};
-
-// Khởi chạy ban đầu
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(p => {
-    lastPos = [p.coords.longitude, p.coords.latitude];
-  }, () => {});
-}
-initEngine();
-</script>
+  <!-- CÁC MODULE JAVASCRIPT ĐỘC LẬP -->
+  <script src="js/state.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/ble.js"></script>
+  <script src="js/map-service.js"></script>
+  <script src="js/search.js"></script>
+  <script src="js/routing.js"></script>
+  <script src="js/navigation.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
