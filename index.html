@@ -26,8 +26,13 @@
   .pill.ok { background:#12382a; color:var(--ok); }
   .pill.warn { background:#3d2e0e; color:var(--warn); }
   .pill.info { background:#122a3d; color:var(--acc); }
-  .res { padding:10px; border-bottom:1px solid #2a323d; font-size:14px; cursor:pointer; }
+  .res { padding:10px 12px; border-bottom:1px solid #2a323d; font-size:14px; cursor:pointer; display:flex; align-items:center; gap:10px; border-radius:8px; margin-top:2px; transition:background .15s; }
+  .res:hover, .res:active { background:#242b35; }
   .res:last-child { border-bottom:0; }
+  .res-icon { font-size:16px; opacity:.85; }
+  .res-body { flex:1; min-width:0; }
+  .res-title { font-weight:600; color:#e8edf3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .res-sub { font-size:12px; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
   .big { display:flex; align-items:center; gap:16px; }
   #arrow { font-size:64px; width:70px; text-align:center; line-height:1; }
   #dist { font-size:38px; font-weight:700; }
@@ -142,9 +147,20 @@ let lMap = null, lRouteLine = null, lUserMarker = null, lDestMarker = null;
 
 // ================= BLE =================
 function setBle(text, ok) {
-  $('bleState').textContent = ok ? 'Đã kết nối' : 'Chưa kết nối màn hình';
+  $('bleState').textContent = ok ? '🟢 ĐÃ KẾT NỐI' : 'Chưa kết nối màn hình';
   $('bleState').className = 'pill ' + (ok ? 'ok' : 'warn');
   $('bleMsg').textContent = text;
+  if (ok) {
+    $('btnConn').textContent = '✅ Đã kết nối MotoNav (Bấm để ngắt)';
+    $('btnConn').style.background = 'var(--ok)';
+    $('btnConn').style.color = '#fff';
+    $('btnConnAll').style.display = 'none';
+  } else {
+    $('btnConn').textContent = 'Kết nối MotoNav';
+    $('btnConn').style.background = 'var(--acc)';
+    $('btnConn').style.color = '#04121f';
+    $('btnConnAll').style.display = 'block';
+  }
 }
 
 async function openGatt() {
@@ -152,7 +168,9 @@ async function openGatt() {
   const svc = await server.getPrimaryService(SVC);
   rxChar = await svc.getCharacteristic(RXU);
   lastMsg = '';
-  setBle(device.name || 'MotoNav (Đã kết nối)', true);
+  setBle('Đã kết nối thành công với ' + (device.name || 'MotoNav'), true);
+  // Gửi xác nhận kết nối lên OLED ngay lập tức
+  send('C|OK|Da ket noi\n', true);
 }
 
 function onDisconnected() {
@@ -188,7 +206,14 @@ async function doConnectBle(acceptAll = false) {
   }
 }
 
-$('btnConn').onclick = () => doConnectBle(false);
+$('btnConn').onclick = () => {
+  if (device && device.gatt && device.gatt.connected) {
+    device.gatt.disconnect();
+    setBle('Đã ngắt kết nối', false);
+    return;
+  }
+  doConnectBle(false);
+};
 $('btnConnAll').onclick = () => doConnectBle(true);
 
 let busy = false, queued = null;
@@ -422,6 +447,122 @@ function pick(d) {
   }
 }
 
+// ================= GỢI Ý ĐỊA CHỈ OPENSTREETMAP (AUTOCOMPLETE KHI GÕ) =================
+let suggestTimer = null;
+
+function renderOsmSuggestions(items) {
+  const box = $('results');
+  box.innerHTML = '';
+  if (!items || !items.length) {
+    box.innerHTML = '<div class="mut" style="padding:8px 4px;">Không tìm thấy địa điểm gợi ý</div>';
+    return;
+  }
+  items.forEach(it => {
+    const div = document.createElement('div');
+    div.className = 'res';
+    div.innerHTML = `
+      <span class="res-icon">📍</span>
+      <div class="res-body">
+        <div class="res-title">${it.title}</div>
+        <div class="res-sub">${it.sub || it.fullName}</div>
+      </div>
+    `;
+    div.onclick = () => {
+      $('q').value = it.title;
+      pick({
+        name: it.fullName,
+        lat: it.lat,
+        lon: it.lon,
+        gLocation: window.google ? new google.maps.LatLng(it.lat, it.lon) : null
+      });
+      box.innerHTML = '';
+    };
+    box.appendChild(div);
+  });
+}
+
+async function fetchOsmSuggestions(q) {
+  if (!q || q.length < 2) {
+    $('results').innerHTML = '';
+    return;
+  }
+
+  // 1. Thử Photon API (dữ liệu OpenStreetMap, chuyên autocomplete thời gian thực cực nhanh)
+  try {
+    let biasParam = '';
+    if (lastPos) biasParam = `&lat=${lastPos[1]}&lon=${lastPos[0]}`;
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6${biasParam}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data && data.features && data.features.length) {
+      const items = data.features.map(f => {
+        const p = f.properties;
+        const coords = f.geometry.coordinates; // [lon, lat]
+        const title = p.name || (p.housenumber ? p.housenumber + ' ' : '') + (p.street || 'Địa điểm');
+        const parts = [p.housenumber, p.street, p.district, p.city || p.state, p.country].filter(Boolean);
+        const sub = parts.length ? parts.join(', ') : (p.county || p.country || '');
+        return {
+          title, sub,
+          fullName: title + (sub ? ', ' + sub : ''),
+          lat: coords[1],
+          lon: coords[0]
+        };
+      });
+      renderOsmSuggestions(items);
+      return;
+    }
+  } catch (err) {
+    console.warn('Photon error, chuyển sang Nominatim:', err);
+  }
+
+  // 2. Dự phòng Nominatim OpenStreetMap
+  try {
+    const bias = lastPos ? `&viewbox=${lastPos[0] - .6},${lastPos[1] + .6},${lastPos[0] + .6},${lastPos[1] - .6}` : '';
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=vi&q=${encodeURIComponent(q)}${bias}`);
+    const list = await r.json();
+    if (list && list.length) {
+      const items = list.map(it => {
+        const parts = it.display_name.split(',');
+        const title = parts[0].trim();
+        const sub = parts.slice(1).join(',').trim();
+        return {
+          title, sub,
+          fullName: it.display_name,
+          lat: +it.lat,
+          lon: +it.lon
+        };
+      });
+      renderOsmSuggestions(items);
+    } else {
+      $('results').innerHTML = '<div class="mut" style="padding:8px 4px;">Không tìm thấy địa điểm phù hợp</div>';
+    }
+  } catch (e) {
+    console.warn('Nominatim error:', e);
+  }
+}
+
+// Bắt sự kiện gõ phím để gợi ý tức thì
+$('q').addEventListener('input', () => {
+  if (mapEngine === 'google') return; // Chế độ Google thì Google Autocomplete tự động xử lý
+  clearTimeout(suggestTimer);
+  const val = $('q').value.trim();
+  if (val.length < 2) {
+    $('results').innerHTML = '';
+    return;
+  }
+  suggestTimer = setTimeout(() => {
+    fetchOsmSuggestions(val);
+  }, 280);
+});
+
+// Khi nhấn Enter trong ô tìm kiếm
+$('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    $('btnSearch').click();
+  }
+});
+
 $('btnSearch').onclick = async () => {
   const q = $('q').value.trim();
   if (!q) return;
@@ -460,7 +601,13 @@ $('btnSearch').onclick = async () => {
         results.slice(0, 5).forEach(it => {
           const div = document.createElement('div');
           div.className = 'res';
-          div.textContent = it.formatted_address;
+          div.innerHTML = `
+            <span class="res-icon">📍</span>
+            <div class="res-body">
+              <div class="res-title">${it.formatted_address.split(',')[0]}</div>
+              <div class="res-sub">${it.formatted_address}</div>
+            </div>
+          `;
           div.onclick = () => {
             const loc = it.geometry.location;
             pick({
@@ -480,26 +627,8 @@ $('btnSearch').onclick = async () => {
     return;
   }
 
-  // 4. Chế độ dự phòng OpenStreetMap
-  try {
-    const bias = lastPos ? `&viewbox=${lastPos[0] - .6},${lastPos[1] + .6},${lastPos[0] + .6},${lastPos[1] - .6}` : '';
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=vi&q=${encodeURIComponent(q)}${bias}`);
-    const list = await r.json();
-    const box = $('results');
-    box.innerHTML = '';
-    if (!list.length) { setMsg('Không tìm thấy. Thử nhập toạ độ copy từ Google Maps.'); return; }
-    list.forEach(it => {
-      const div = document.createElement('div');
-      div.className = 'res';
-      div.textContent = it.display_name;
-      div.onclick = () => pick({
-        name: it.display_name, lat: +it.lat, lon: +it.lon,
-        gLocation: window.google ? new google.maps.LatLng(+it.lat, +it.lon) : null
-      });
-      box.appendChild(div);
-    });
-    setMsg('Chọn một kết quả bên dưới');
-  } catch (e) { setMsg('Lỗi tìm kiếm: ' + e.message); }
+  // 4. Chế độ OpenStreetMap
+  fetchOsmSuggestions(q);
 };
 
 // ================= TÍNH TOÁN LỘ TRÌNH (GOOGLE & OSRM) =================

@@ -37,13 +37,90 @@ unsigned long lastRx = 0;
 bool   needRedraw = true;
 bool   timedOut = true;
 bool   wasConnected = false;
+unsigned long lastAdvKick = 0;
+
+// ---- Onboard RGB LED (BW16) ----
+#ifndef LED_R
+#define LED_R PA12
+#endif
+#ifndef LED_G
+#define LED_G PA14
+#endif
+#ifndef LED_B
+#define LED_B PA13
+#endif
+
+// Thuong BW16 onboard RGB LED la Active HIGH (HIGH = sang).
+// Neu board cua ban la loai Active LOW (LOW = sang), chi can doi thanh true:
+const bool LED_ACTIVE_LOW = false;
+
+unsigned long lastLedBlink = 0;
+bool ledBlinkState = false;
+
+void setRgb(bool r, bool g, bool b) {
+  digitalWrite(LED_R, (r ^ LED_ACTIVE_LOW) ? HIGH : LOW);
+  digitalWrite(LED_G, (g ^ LED_ACTIVE_LOW) ? HIGH : LOW);
+  digitalWrite(LED_B, (b ^ LED_ACTIVE_LOW) ? HIGH : LOW);
+}
+
+void initRgb() {
+  pinMode(LED_R, OUTPUT);
+  pinMode(LED_G, OUTPUT);
+  pinMode(LED_B, OUTPUT);
+  setRgb(false, false, false);
+}
+
+void updateLed() {
+  unsigned long now = millis();
+  if (now - lastLedBlink > 350) {
+    lastLedBlink = now;
+    ledBlinkState = !ledBlinkState;
+  }
+
+  bool isConnected = BLE.connected(0);
+
+  // 1. Mat ket noi / Cho dien thoai -> Chop Do (Red)
+  if (!isConnected || timedOut) {
+    setRgb(ledBlinkState, false, false);
+    return;
+  }
+
+  // 2. Da ket noi BLE nhung chua dan duong ('C' hoac 'X') -> Xanh duong (Blue)
+  if (navDir == 'C' || navDir == 'X') {
+    setRgb(false, false, true);
+    return;
+  }
+
+  // 3. Cac trang thai dan duong
+  switch (navDir) {
+    case 'S': // Di thang -> Xanh la (Green) sang tinh
+      setRgb(false, true, false);
+      break;
+    case 'L': // Re trai -> Chop Vang (Yellow: Do + Xanh la) nhu xi-nhan trai
+      setRgb(ledBlinkState, ledBlinkState, false);
+      break;
+    case 'R': // Re phai -> Chop Cyan (Xanh la + Xanh duong) nhu xi-nhan phai
+      setRgb(false, ledBlinkState, ledBlinkState);
+      break;
+    case 'U': // Quay dau -> Chop Do (Red) canh bao
+      setRgb(ledBlinkState, false, false);
+      break;
+    case 'A': // Den noi -> Sang Trang (White: R + G + B)
+      setRgb(true, true, true);
+      break;
+    default:
+      setRgb(false, false, true);
+      break;
+  }
+}
 
 // ---- Bo dem nhan BLE ----
 volatile bool hasData = false;
 String pending = "";
 String lineBuf = "";
 
-const unsigned long TIMEOUT_MS = 20000;
+const unsigned long TIMEOUT_MS = 8000;
+const unsigned long ADV_KICK_MS = 3000;  // khi chua ket noi: cu 3s ep phat quang ba lai (an toan neu dang phat)
 
 void writeCB(BLECharacteristic* chr, uint8_t /*connID*/) {
   if (chr->getDataLen() > 0) {
@@ -99,10 +176,18 @@ void drawArrow(char d) {
 
 void render() {
   u8g2.clearBuffer();
-  if (timedOut || navDir == 'X') {
+  if (timedOut) {
     u8g2.setFont(u8g2_font_6x10_tr);
     u8g2.drawStr(4, 14, "MotoNav");
-    u8g2.drawStr(4, 28, timedOut ? "Cho dien thoai..." : "Khong dan duong");
+    u8g2.drawStr(4, 28, wasConnected ? "Mat tin hieu..." : "Cho dien thoai...");
+  } else if (navDir == 'C') {
+    u8g2.setFont(u8g2_font_6x10_tr);
+    u8g2.drawStr(4, 14, "MotoNav: DA KET NOI");
+    u8g2.drawStr(4, 28, "San sang dan duong");
+  } else if (navDir == 'X') {
+    u8g2.setFont(u8g2_font_6x10_tr);
+    u8g2.drawStr(4, 14, "MotoNav");
+    u8g2.drawStr(4, 28, "Khong dan duong");
   } else {
     drawArrow(navDir);
     u8g2.setFont(u8g2_font_logisoso16_tr);
@@ -128,16 +213,19 @@ void handleLine(const String& s) {
 
 void setup() {
   Serial.begin(115200);
+  initRgb();
   // Khong goi Wire.begin() o day vi u8g2.begin() da tu dong goi Wire.begin().
   // Goi Wire.begin() 2 lan tren SDK AmebaD se gay loi:
   // "Error amb_ard_pin_check_fun. Incorrect pin: 26" do bien SDA_pin bi bien doi thanh PA_26 (26).
   u8g2.begin();
   u8g2.setContrast(255);
 
+  // Goi quang ba chinh: Flags(3) + Ten(9) + UUID128(18) = 30 byte (<= 31). Du de iPhone loc theo ten hoac UUID.
   advdata.addFlags(GAP_ADTYPE_FLAGS_GENERAL | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED);
   advdata.addCompleteName("MotoNav");
+  advdata.addCompleteServices(BLEUUID(UART_SERVICE_UUID));
+  // Scan response: chi ten (iOS xin them goi nay khi quet chu dong)
   scndata.addCompleteName("MotoNav");
-  scndata.addCompleteServices(BLEUUID(UART_SERVICE_UUID));
 
   Rx.setWriteProperty(true);
   Rx.setWriteNRProperty(true);
@@ -155,12 +243,19 @@ void setup() {
   UartService.addCharacteristic(Tx);
 
   BLE.init();
+  // QUAN TRONG cho iPhone: ten GAP mac dinh cua thu vien la "AMEBA_BLE_DEV", khac ten quang ba "MotoNav".
+  // iOS/Bluefy cache & loc theo ten GAP nen se khong thay thiet bi. Phai dat trung ten truoc beginPeripheral().
+  BLE.setDeviceName("MotoNav");
   BLE.configAdvert()->setAdvData(advdata);
   BLE.configAdvert()->setScanRspData(scndata);
+  // Dat khoang thoi gian phat quang ba nhanh (50ms - 100ms) de iPhone de bat duoc song
+  BLE.configAdvert()->setMinInterval(50);
+  BLE.configAdvert()->setMaxInterval(100);
   BLE.configServer(1);
   BLE.addService(UartService);
   BLE.beginPeripheral();
 
+  Serial.println("[BLE] Dang quang ba: MotoNav");
   render();
 }
 
@@ -168,12 +263,27 @@ void loop() {
   bool isConnected = BLE.connected(0);
   if (wasConnected && !isConnected) {
     // Ngat ket noi (tat Bluefy, thoat app hoac ra xa) -> Khoi dong lai quang ba BLE
+    Serial.println("[BLE] Mat ket noi -> phat lai quang ba");
     delay(50);
     BLE.configAdvert()->startAdv();
     timedOut = true;
     needRedraw = true;
   }
+  if (!wasConnected && isConnected) {
+    Serial.println("[BLE] Da ket noi thanh cong!");
+    navDir = 'C';
+    timedOut = false;
+    lastRx = millis();
+    needRedraw = true;
+  }
   wasConnected = isConnected;
+
+  // Watchdog quang ba: iPhone hay huy ket noi giua chung (huy pairing/GATT cache) lam stack dung phat.
+  // Chua ket noi thi dinh ky goi startAdv(); neu dang phat thi stack bo qua, khong sao.
+  if (!isConnected && millis() - lastAdvKick > ADV_KICK_MS) {
+    lastAdvKick = millis();
+    BLE.configAdvert()->startAdv();
+  }
 
   if (hasData) {
     String chunk = pending;
@@ -199,5 +309,7 @@ void loop() {
     needRedraw = false;
     render();
   }
+
+  updateLed();
   delay(20);
 }
