@@ -136,6 +136,7 @@ void setup() {
 
   advdata.addFlags(GAP_ADTYPE_FLAGS_GENERAL | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED);
   advdata.addCompleteName("MotoNav");
+  scndata.addCompleteName("MotoNav");
   scndata.addCompleteServices(BLEUUID(UART_SERVICE_UUID));
 
   Rx.setWriteProperty(true);
