@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 1. Kết nối BLE
   $('btnConn').onclick = () => {
+    if (MotoNav.background && typeof MotoNav.background.start === 'function') {
+      MotoNav.background.start();
+    }
     if (state.device && state.device.gatt && state.device.gatt.connected) {
       MotoNav.ble.disconnect();
     } else {
@@ -18,6 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   $('btnConnAll').onclick = () => {
+    if (MotoNav.background && typeof MotoNav.background.start === 'function') {
+      MotoNav.background.start();
+    }
     MotoNav.ble.doConnectBle(true);
   };
 
@@ -61,6 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 4. Bắt đầu / Dừng dẫn đường
   $('btnStart').onclick = () => {
+    if (MotoNav.background && typeof MotoNav.background.start === 'function') {
+      MotoNav.background.start();
+    }
     MotoNav.navigation.startNavigation();
   };
 
@@ -84,10 +93,17 @@ document.addEventListener('DOMContentLoaded', () => {
     b.onclick = () => MotoNav.ble.send(b.dataset.t + '\n', true);
   });
 
-  // 7. Giữ màn hình sáng khi quay lại tab trình duyệt
+  // 7. Giữ màn hình sáng và kiểm tra kết nối khi quay lại tab trình duyệt
   document.addEventListener('visibilitychange', () => {
-    if (state.navigating && document.visibilityState === 'visible') {
-      MotoNav.utils.lockScreen();
+    if (document.visibilityState === 'visible') {
+      if (state.navigating) {
+        MotoNav.utils.lockScreen();
+      }
+      // Nếu thiết bị đã từng kết nối mà bị rớt trong lúc tắt màn hình, tự động kết nối lại
+      if (state.device && (!state.device.gatt || !state.device.gatt.connected || !state.rxChar)) {
+        console.log('[MotoNav] Phát hiện mất kết nối BLE khi mở lại tab, tự kết nối lại...');
+        MotoNav.ble.onDisconnected();
+      }
     }
   });
 

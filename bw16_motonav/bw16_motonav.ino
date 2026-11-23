@@ -119,7 +119,7 @@ volatile bool hasData = false;
 String pending = "";
 String lineBuf = "";
 
-const unsigned long TIMEOUT_MS = 15000;
+const unsigned long TIMEOUT_MS = 35000;
 const unsigned long ADV_KICK_MS = 3000;  // khi chua ket noi: cu 3s ep phat quang ba lai (an toan neu dang phat)
 
 void writeCB(BLECharacteristic* chr, uint8_t /*connID*/) {
@@ -202,7 +202,10 @@ void handleLine(const String& s) {
   if (s.startsWith("K|")) {
     // Goi tin heartbeat giu ket noi tu dien thoai
     lastRx = millis();
-    timedOut = false;
+    if (timedOut) {
+      timedOut = false;
+      needRedraw = true;
+    }
     return;
   }
   int i1 = s.indexOf('|');
@@ -213,6 +216,9 @@ void handleLine(const String& s) {
   navDist = s.substring(i1 + 1, i2);
   navStreet = s.substring(i2 + 1);
   lastRx = millis();
+  if (timedOut) {
+    needRedraw = true;
+  }
   timedOut = false;
   needRedraw = true;
 }
@@ -267,22 +273,33 @@ void setup() {
 
 void loop() {
   bool isConnected = BLE.connected(0);
+  static unsigned long disconnectDetectTime = 0;
+
   if (wasConnected && !isConnected) {
-    // Ngat ket noi (tat Bluefy, thoat app hoac ra xa) -> Khoi dong lai quang ba BLE
-    Serial.println("[BLE] Mat ket noi -> phat lai quang ba");
-    delay(50);
-    BLE.configAdvert()->startAdv();
-    timedOut = true;
-    needRedraw = true;
+    if (disconnectDetectTime == 0) {
+      disconnectDetectTime = millis();
+    } else if (millis() - disconnectDetectTime > 250) {
+      // Chi thuc su coi la mat ket noi khi trang thai !isConnected keo dai tren 250ms
+      // tranh cac dot chap chon thoang qua (glitch) cua BLE stack
+      Serial.println("[BLE] Mat ket noi -> phat lai quang ba");
+      delay(50);
+      BLE.configAdvert()->startAdv();
+      timedOut = true;
+      needRedraw = true;
+      wasConnected = false;
+      disconnectDetectTime = 0;
+    }
+  } else {
+    disconnectDetectTime = 0;
+    if (!wasConnected && isConnected) {
+      Serial.println("[BLE] Da ket noi thanh cong!");
+      navDir = 'C';
+      timedOut = false;
+      lastRx = millis();
+      needRedraw = true;
+      wasConnected = true;
+    }
   }
-  if (!wasConnected && isConnected) {
-    Serial.println("[BLE] Da ket noi thanh cong!");
-    navDir = 'C';
-    timedOut = false;
-    lastRx = millis();
-    needRedraw = true;
-  }
-  wasConnected = isConnected;
 
   // Watchdog quang ba: iPhone hay huy ket noi giua chung (huy pairing/GATT cache) lam stack dung phat.
   // Chua ket noi thi dinh ky goi startAdv(); neu dang phat thi stack bo qua, khong sao.

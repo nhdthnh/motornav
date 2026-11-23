@@ -18,7 +18,10 @@
   <div class="card">
     <h1>
       <span>MotoNav</span>
-      <span id="bleState" class="pill warn">Chưa kết nối màn hình</span>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+        <span id="bgBadge" class="pill" style="font-size:11px;">Chạy ngầm: Sẵn sàng</span>
+        <span id="bleState" class="pill warn">Chưa kết nối màn hình</span>
+      </div>
     </h1>
     <div class="row">
       <button id="btnConn">Kết nối MotoNav</button>
@@ -103,6 +106,7 @@
   <!-- CÁC MODULE JAVASCRIPT ĐỘC LẬP -->
   <script src="js/state.js"></script>
   <script src="js/utils.js"></script>
+  <script src="js/background.js"></script>
   <script src="js/ble.js"></script>
   <script src="js/map-service.js"></script>
   <script src="js/search.js"></script>

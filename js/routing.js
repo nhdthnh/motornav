@@ -47,7 +47,7 @@ MotoNav.routing = (() => {
         : `<span class="pill" style="font-size:11px; padding:2px 7px;">+${diffMin} phút</span>`;
 
       html += `
-        <div class="route-opt ${isSel ? 'active' : ''}" onclick="MotoNav.routing.selectRoute(${idx})">
+        <div class="route-opt ${isSel ? 'active' : ''}" onclick="event.stopPropagation(); MotoNav.routing.selectRoute(${idx})">
           <div class="route-opt-top">
             <div>
               <span class="route-time">${r.durationText}</span>
@@ -80,22 +80,58 @@ MotoNav.routing = (() => {
         strokeWeight: 5,
         zIndex: 5
       });
-      poly.addListener('click', () => {
+      poly.addListener('click', (e) => {
+        if (e && e.stop) e.stop();
         selectRoute(idx);
       });
       state.gAltPolylines.push(poly);
     });
   }
 
+  // Tìm bước (step) gần toạ độ hiện tại nhất để tránh reset k = 0 khi đổi tuyến lúc đang chạy
+  function findClosestStepIndex(p, steps) {
+    if (!steps || !steps.length) return 0;
+    let bestK = 0, bestDist = Infinity;
+    for (let i = 0; i < steps.length; i++) {
+      let pt = null;
+      if (state.mapEngine === 'google') {
+        if (steps[i].start_location) {
+          pt = [steps[i].start_location.lng(), steps[i].start_location.lat()];
+        } else if (steps[i].end_location) {
+          pt = [steps[i].end_location.lng(), steps[i].end_location.lat()];
+        }
+      } else {
+        if (steps[i].maneuver && steps[i].maneuver.location) {
+          pt = steps[i].maneuver.location;
+        } else if (steps[i].geometry && steps[i].geometry.coordinates && steps[i].geometry.coordinates.length) {
+          pt = steps[i].geometry.coordinates[0];
+        }
+      }
+      if (pt) {
+        const d = MotoNav.utils.hav(p, pt);
+        if (d < bestDist) {
+          bestDist = d;
+          bestK = i;
+        }
+      }
+    }
+    return bestK;
+  }
+
   // Chuyển sang tuyến đường được chọn (từ danh sách hoặc chạm trên bản đồ)
   function selectRoute(idx) {
     if (!state.availableRoutes || !state.availableRoutes[idx]) return;
+    state.isSelectingRoute = true;
     state.activeRouteIndex = idx;
     const cur = state.availableRoutes[idx];
 
     if (state.mapEngine === 'google') {
       if (state.gDirectionsRenderer) {
-        state.gDirectionsRenderer.setRouteIndex(idx);
+        try {
+          state.gDirectionsRenderer.setRouteIndex(idx);
+        } catch (e) {
+          console.warn('gDirectionsRenderer setRouteIndex error:', e);
+        }
       }
       drawGoogleAltPolylines();
       state.routeLine = cur.overview_path.map(p => [p.lng(), p.lat()]);
@@ -116,8 +152,16 @@ MotoNav.routing = (() => {
       }
     }
 
-    state.k = 0;
-    state.offCount = 0;
+    if (state.navigating && state.lastPos) {
+      state.k = findClosestStepIndex(state.lastPos, state.steps);
+      state.offCount = 0;
+      // Khóa tự động reroute trong 10 giây để người dùng kịp nhập tuyến mới và ổn định GPS
+      state.rerouteGraceUntil = Date.now() + 10000;
+    } else {
+      state.k = 0;
+      state.offCount = 0;
+    }
+
     renderRouteCards();
 
     if (state.navigating) {
@@ -126,6 +170,10 @@ MotoNav.routing = (() => {
         MotoNav.navigation.updateNavGuidance(state.lastPos);
       }
     }
+
+    setTimeout(() => {
+      state.isSelectingRoute = false;
+    }, 400);
   }
 
   // Tính toán lộ trình qua Google Maps Directions API
@@ -155,9 +203,16 @@ MotoNav.routing = (() => {
             };
           });
 
-          state.activeRouteIndex = 0;
+          // Khi reroute, nếu index hiện tại vẫn hợp lệ thì giữ nguyên, ngược lại về 0
+          if (!isReroute || state.activeRouteIndex >= result.routes.length) {
+            state.activeRouteIndex = 0;
+          }
+          state.isSelectingRoute = true;
           state.gDirectionsRenderer.setDirections(result);
-          state.gDirectionsRenderer.setRouteIndex(state.activeRouteIndex);
+          try {
+            state.gDirectionsRenderer.setRouteIndex(state.activeRouteIndex);
+          } catch (e) {}
+          setTimeout(() => { state.isSelectingRoute = false; }, 400);
 
           drawGoogleAltPolylines();
 
@@ -213,7 +268,10 @@ MotoNav.routing = (() => {
       };
     });
 
-    state.activeRouteIndex = 0;
+    // Khi reroute, nếu index hiện tại vẫn hợp lệ thì giữ nguyên, ngược lại về 0
+    if (!isReroute || state.activeRouteIndex >= j.routes.length) {
+      state.activeRouteIndex = 0;
+    }
     const curRoute = state.availableRoutes[state.activeRouteIndex];
     state.routeLine = curRoute.coordinates;
     state.steps = curRoute.steps;
@@ -230,7 +288,8 @@ MotoNav.routing = (() => {
           opacity: isSel ? 0.95 : 0.6
         }).addTo(state.lMap);
 
-        poly.on('click', () => {
+        poly.on('click', (e) => {
+          if (e) L.DomEvent.stopPropagation(e);
           selectRoute(idx);
         });
         return poly;

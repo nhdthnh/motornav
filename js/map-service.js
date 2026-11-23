@@ -65,8 +65,9 @@ MotoNav.map = (() => {
 
     // Lắng nghe sự kiện chuyển tuyến khi bấm trực tiếp vào đường trên Google Map
     state.gDirectionsRenderer.addListener('routeindex_changed', () => {
+      if (state.isSelectingRoute) return;
       const idx = state.gDirectionsRenderer.getRouteIndex();
-      if (idx !== state.activeRouteIndex && state.availableRoutes && state.availableRoutes[idx]) {
+      if (typeof idx === 'number' && idx >= 0 && idx !== state.activeRouteIndex && state.availableRoutes && state.availableRoutes[idx]) {
         MotoNav.routing.selectRoute(idx);
       }
     });

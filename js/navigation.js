@@ -113,6 +113,8 @@ MotoNav.navigation = (() => {
       setMsg('Lỗi tự động tính lại đường: ' + e.message);
     } finally {
       state.rerouting = false;
+      state.offCount = 0;
+      state.rerouteGraceUntil = Date.now() + 6000;
     }
   }
 
@@ -152,13 +154,21 @@ MotoNav.navigation = (() => {
     updateNavGuidance(p);
 
     // TỰ ĐỘNG ĐIỀU CHỈNH HƯỚNG ĐI KHI LỆCH TUYẾN ĐƯỜNG:
-    // Nếu xe cách xa tuyến đường > 35m trong 2 nhịp GPS liên tiếp -> Reroute ngay lập tức
+    // Nếu xe cách xa tuyến đường > 45m (thích ứng độ chính xác GPS) trong 4 nhịp GPS liên tiếp -> Reroute
     if (state.routeLine && state.routeLine.length >= 2) {
+      if (Date.now() < (state.rerouteGraceUntil || 0)) {
+        state.offCount = 0;
+        return;
+      }
       const offTrack = alongLine(p, state.routeLine).off;
-      if (offTrack > 35) state.offCount++;
-      else state.offCount = 0;
+      const offThreshold = Math.max(45, (pos.coords.accuracy || 20) * 0.9);
+      if (offTrack > offThreshold) {
+        state.offCount++;
+      } else {
+        state.offCount = 0;
+      }
 
-      if (state.offCount >= 2 && !state.rerouting) {
+      if (state.offCount >= 4 && !state.rerouting) {
         reroute(p);
       }
     }
@@ -216,6 +226,8 @@ MotoNav.navigation = (() => {
 
       state.navigating = true;
       state.lastGpsFix = Date.now();
+      state.offCount = 0;
+      state.rerouteGraceUntil = Date.now() + 10000;
       startGpsWatch();
 
       // GPS Watchdog: Tự phục hồi bộ thu GPS nếu quá 15s không nhận được tín hiệu

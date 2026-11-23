@@ -35,6 +35,8 @@ MotoNav.state = {
   activeRouteIndex: 0,
   gAltPolylines: [],
   lRouteLines: [],
+  isSelectingRoute: false,
+  rerouteGraceUntil: 0,
 
   // Engine Bản đồ ('google' hoặc 'osm')
   mapEngine: 'osm',
