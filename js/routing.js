@@ -166,6 +166,10 @@ MotoNav.routing = (() => {
 
     if (state.navigating) {
       setMsg('Đã chuyển điều hướng sang: ' + (cur.summary || `Tuyến ${idx + 1}`));
+      // Gửi lại lộ trình offline mới xuống BW16 trước khi cập nhật chỉ dẫn
+      if (MotoNav.navigation && typeof MotoNav.navigation.sendPlanAndSync === 'function') {
+        MotoNav.navigation.sendPlanAndSync();
+      }
       if (state.lastPos) {
         MotoNav.navigation.updateNavGuidance(state.lastPos);
       }

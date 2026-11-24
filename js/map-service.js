@@ -149,12 +149,13 @@ MotoNav.map = (() => {
     }).addTo(state.lMap);
   }
 
-  // Khởi chạy Engine kiểm tra Key
+  // Khởi chạy Engine kiểm tra Key. Trả về Promise để app.js biết khi nào bản đồ sẵn sàng
+  // (dùng cho việc tự khôi phục phiên dẫn đường sau khi iOS kill trang).
   function initEngine() {
     const key = getStoredKey();
     const badge = $('engineBadge');
     if (key) {
-      loadGoogleSdk(key).then(() => {
+      return loadGoogleSdk(key).then(() => {
         state.mapEngine = 'google';
         if (badge) {
           badge.textContent = 'Bản đồ: Google Maps 🟢';
@@ -177,6 +178,7 @@ MotoNav.map = (() => {
         badge.className = 'pill warn';
       }
       initLeafletMap();
+      return Promise.resolve();
     }
   }
 

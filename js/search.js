@@ -31,7 +31,14 @@ MotoNav.search = (() => {
     // Tự động tìm lộ trình nếu đã có vị trí GPS hiện tại
     if (state.lastPos) {
       MotoNav.routing.buildRoute(state.lastPos).then(() => {
-        setMsg('Đã tìm thấy các gợi ý tuyến đường. Chọn tuyến và bấm "Bắt đầu dẫn đường".');
+        if (state.navigating) {
+          // Đổi điểm đến khi đang chạy: nạp lại lộ trình mới xuống BW16 + cập nhật chỉ dẫn
+          MotoNav.navigation.sendPlanAndSync();
+          MotoNav.navigation.updateNavGuidance(state.lastPos);
+          setMsg('Đã chuyển sang lộ trình mới. Tiếp tục dẫn đường.');
+        } else {
+          setMsg('Đã tìm thấy các gợi ý tuyến đường. Chọn tuyến và bấm "Bắt đầu dẫn đường".');
+        }
       }).catch(err => {
         setMsg('Lỗi tìm đường: ' + err.message);
       });

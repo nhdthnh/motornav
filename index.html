@@ -27,7 +27,21 @@
       <button id="btnConn">Kết nối MotoNav</button>
       <button id="btnConnAll" class="sec" title="Dùng khi không tìm thấy tên MotoNav">Quét tất cả BLE</button>
     </div>
+    <div class="row">
+      <button id="btnResync" class="sec" style="font-size:13px; padding:9px 10px;" title="Gửi lại lộ trình + chỉ dẫn hiện tại xuống màn hình OLED">↻ Gửi lại lộ trình xuống OLED</button>
+    </div>
     <div id="bleMsg" class="mut" style="margin-top:6px">Mẹo: Bật nguồn BW16 trước khi bấm kết nối.</div>
+
+    <!-- HƯỚNG DẪN 2 CHẾ ĐỘ KHI ĐI XE -->
+    <div style="margin-top:10px; background:#f8fafc; border:1px solid var(--card-border); border-radius:8px; padding:10px; font-size:12px; line-height:1.5;">
+      <div style="font-weight:700; color:#0f172a; margin-bottom:4px;">💡 2 CÁCH DÙNG KHI ĐI XE MÁY (IPHONE):</div>
+      <div style="margin-bottom:6px;">
+        <b>1. Chế độ Bỏ Túi (Khuyên dùng):</b> Bấm nút <span style="background:#e2e8f0; padding:1px 5px; border-radius:4px;">🌙 Màn hình đen</span> bên dưới. Toàn bộ màn hình iPhone đen tuyền (OLED tắt hết điểm ảnh = tiết kiệm pin như tắt máy), điện thoại không bị sleep nên <b>BLE và GPS chạy liên tục 100%</b>.
+      </div>
+      <div>
+        <b>2. Tắt màn hình bằng nút Nguồn:</b> BW16 tự động chuyển sang <b>Offline HUD</b> (đếm lùi khoảng cách và chuyển chặng theo lộ trình đã nạp sẵn, hiện nhãn <b>OFF</b>). Mở màn hình lại, app tự kết nối lại trong 1 giây để đồng bộ GPS thật.
+      </div>
+    </div>
   </div>
 
   <!-- ĐIỀU HƯỚNG VÀ BẢN ĐỒ -->
@@ -67,6 +81,14 @@
       <button id="btnStart">Bắt đầu dẫn đường</button>
       <button id="btnStop" class="bad">Dừng</button>
     </div>
+
+    <!-- Nút Bật Chế độ Bỏ Túi Màn Hình Đen Tiết Kiệm Pin -->
+    <div style="margin-top:8px;">
+      <button id="btnPocketMode" class="sec" style="width:100%; padding:10px; font-weight:600; font-size:13px; background:#1e293b; color:#f8fafc;">
+        🌙 Màn hình đen tiết kiệm pin (Chế độ bỏ túi)
+      </button>
+    </div>
+
     <div id="msg" class="mut" style="margin-top:8px"></div>
 
     <!-- Bản đồ trực quan -->
@@ -90,7 +112,7 @@
 
   <!-- THỬ NGHIỆM MÀN HÌNH OLED BW16 -->
   <div class="card">
-    <div class="mut" style="margin-bottom:6px">Thử nghiệm gửi hình ảnh lên OLED</div>
+    <div class="mut" style="margin-bottom:6px">Thử nghiệm gửi hình ảnh lên OLED (Test nhanh không cần lộ trình)</div>
     <div class="row">
       <button class="sec" data-t="L|250m|Nguyen Hue">Trái</button>
       <button class="sec" data-t="R|1.2km|Le Loi">Phải</button>
@@ -100,6 +122,18 @@
       <button class="sec" data-t="U|50m|Pasteur">Quay đầu</button>
       <button class="sec" data-t="A|30m|Diem den">Đến nơi</button>
       <button class="sec" data-t="X||">Tắt</button>
+    </div>
+  </div>
+
+  <!-- LỚP PHỦ MÀN HÌNH ĐEN BỎ TÚI (TIẾT KIỆM PIN OLED KHI ĐÚT TÚI QUẦN) -->
+  <div id="pocketOverlay" style="display:none; position:fixed; inset:0; z-index:999999; background:#000000; color:#64748b; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none; -webkit-user-select:none;">
+    <div style="font-size:36px; margin-bottom:12px;">🏍️</div>
+    <div style="font-size:18px; font-weight:700; color:#94a3b8; margin-bottom:8px;">CHẾ ĐỘ BỎ TÚI ĐANG BẬT</div>
+    <div style="font-size:13px; color:#475569; max-width:280px; line-height:1.5;">
+      Màn hình OLED đen 100% tiết kiệm pin. GPS và Bluetooth tới BW16 liên tục hoạt động thời gian thực.
+    </div>
+    <div style="margin-top:32px; font-size:12px; color:#334155; border:1px solid #1e293b; padding:10px 20px; border-radius:24px;">
+      👆 Chạm 2 lần liên tiếp để mở lại màn hình
     </div>
   </div>
 

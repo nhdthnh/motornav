@@ -10,8 +10,8 @@ MotoNav.state = {
   lastMsg: '',
   curMsg: '',
   blePingTimer: null,
-  busy: false,
-  queued: null,
+  bleConnected: false,
+  bleConnecting: false,
 
   // Điểm đến và dẫn đường
   dest: null,
@@ -21,6 +21,16 @@ MotoNav.state = {
   navigating: false,
   rerouting: false,
   offCount: 0,
+  arrived: false,
+
+  // Lộ trình nạp trước xuống BW16 (chế độ offline khi tắt màn hình)
+  plan: null,
+  planBaseK: 0,
+  planSeqSent: 0,
+
+  // Khôi phục phiên sau khi iOS/Bluefy kill trang
+  pendingResume: false,
+  lastSessionSave: 0,
 
   // GPS & Thiết bị
   watchId: null,

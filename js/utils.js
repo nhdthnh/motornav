@@ -64,14 +64,53 @@ MotoNav.utils = (() => {
     if (streetEl) streetEl.textContent = street || '';
   }
 
+  /**
+   * Bluefy có API riêng để chặn iOS tự khoá màn hình:
+   *   bluetooth.setScreenDimEnabled(true)
+   * API này không có trong Web Bluetooth chuẩn, nên phải feature-detect.
+   * Trả về true nếu Bluefy đã nhận lệnh.
+   */
+  function setBluefyKeepAwake(enabled) {
+    try {
+      const candidates = [window.bluetooth, window.Bluefy, window.bluefy];
+      for (const api of candidates) {
+        if (api && typeof api.setScreenDimEnabled === 'function') {
+          api.setScreenDimEnabled(!!enabled);
+          console.log('[Bluefy] setScreenDimEnabled(' + !!enabled + ')');
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn('Bluefy setScreenDimEnabled lỗi:', e);
+    }
+    return false;
+  }
+
   // Giữ màn hình điện thoại luôn sáng khi đang dẫn đường (Screen WakeLock)
   async function lockScreen() {
+    // 1. Ưu tiên API riêng của Bluefy (nếu đang chạy trong Bluefy)
+    setBluefyKeepAwake(true);
+
+    // 2. Dự phòng bằng Screen Wake Lock chuẩn (iOS 16.4+ / Chrome Android)
     try {
-      if ('wakeLock' in navigator && !MotoNav.state.wake) {
+      if ('wakeLock' in navigator) {
+        if (MotoNav.state.wake && !MotoNav.state.wake.released) return;
         MotoNav.state.wake = await navigator.wakeLock.request('screen');
+        MotoNav.state.wake.addEventListener('release', () => {
+          MotoNav.state.wake = null;
+        });
       }
     } catch (e) {
       console.warn('WakeLock not supported or permitted:', e);
+    }
+  }
+
+  // Nhả giữ màn hình sáng khi dừng dẫn đường / ngắt kết nối
+  async function releaseScreen() {
+    setBluefyKeepAwake(false);
+    if (MotoNav.state.wake) {
+      try { await MotoNav.state.wake.release(); } catch (e) {}
+      MotoNav.state.wake = null;
     }
   }
 
@@ -85,6 +124,8 @@ MotoNav.utils = (() => {
     alongLine,
     setMsg,
     renderHUD,
-    lockScreen
+    lockScreen,
+    releaseScreen,
+    setBluefyKeepAwake
   };
 })();
