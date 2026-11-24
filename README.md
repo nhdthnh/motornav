@@ -55,7 +55,7 @@ Dự án đã giải quyết vấn đề này bằng **2 giải pháp kết hợ
   - Mũi tên dẫn đường 32×32 to rõ ở bên trái.
   - Khoảng cách số lớn (Font Logisoso 18pt) ở trung tâm.
   - Thanh trạng thái đỉnh: hiển thị nhãn `[BLE]` / `[OFF]`, vận tốc xe (`km/h`).
-  - Thanh trạng thái đáy: hiển thị tên đường rõ nét.
+  - **Cuộn chữ qua lại (Ping-Pong Marquee):** Khi tên đường dài (ví dụ: *"Hẻm 107 Nguyễn Văn Khối"*), màn hình tự động dừng ở đầu 1.5s, cuộn êm sang trái để xem trọn vẹn tên đường, dừng ở cuối 1.5s rồi cuộn lùi về đầu mà không bị cắt cụt.
   - Có cấu hình `#define OLED_IS_128X64 1` (chuyển về `0` nếu dùng màn hình 0.91" 128×32).
 - **Bộ đệm Ring Buffer an toàn (Lock-free):**
   - Tiếp nhận dữ liệu BLE trong ngắt qua bộ đệm vòng tĩnh, không dùng `malloc` hay Arduino `String` trong callback, triệt tiêu 100% hiện tượng sập nguồn/treo vi điều khiển khi gửi lộ trình dài.

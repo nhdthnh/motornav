@@ -124,7 +124,7 @@ MotoNav.ble = (() => {
       const dir = 'LRSUA'.indexOf(p.dir) >= 0 ? p.dir : 'S';
       const distM = Math.max(0, Math.round(p.distM || 0));
       const durS = Math.max(0, Math.round(p.durS || 0));
-      const street = String(p.street || '').replace(/[\r\n|]/g, ' ').slice(0, 15);
+      const street = String(p.street || '').replace(/[\r\n|]/g, ' ').slice(0, 45);
       enqueueLine('P|' + i + '|' + dir + '|' + distM + '|' + durS + '|' + street + '\n');
     });
     enqueueLine('PE|\n');

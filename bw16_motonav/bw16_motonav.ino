@@ -2,6 +2,7 @@
  * MotoNav - BW16 (RTL8720DN) + OLED 0.96" (128x64) / 0.91" (128x32) I2C
  * Nhận dữ liệu chỉ đường từ điện thoại qua BLE (Nordic UART Service).
  * Hỗ trợ chế độ OFFLINE tự động đếm lùi và chuyển chặng khi iPhone tắt màn hình.
+ * Hỗ trợ CUỘN CHỮ QUA LẠI (Ping-Pong Marquee) cho tên đường dài (như "Hẻm 107 Nguyễn Văn Khối").
  *
  * ============================================================================
  * CẤU HÌNH PHẦN CỨNG:
@@ -31,11 +32,11 @@
 #define UART_SERVICE_UUID      "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-#define STRING_BUF_SIZE 100
+#define STRING_BUF_SIZE 120
 
 // ---- Cấu hình chế độ Offline khi tắt màn hình ----
 #define MAX_PLAN_STEPS        48     // Số chặng tối đa lưu trong RAM
-#define PLAN_STREET_LEN       24     // Chiều dài tên đường tối đa
+#define PLAN_STREET_LEN       48     // Chiều dài tên đường tối đa (hỗ trợ tên đường dài)
 #define TIMEOUT_MS            4000UL // 4s không có dữ liệu/heartbeat -> tự kích hoạt Offline
 #define ADV_KICK_MS           3000UL // Định kỳ kích phát quảng bá lại khi chưa kết nối
 #define OFFLINE_MIN_SPEED     2.0f   // m/s (~7 km/h)
@@ -88,6 +89,14 @@ PlanStep plan[MAX_PLAN_STEPS];
 uint8_t  planLen = 0;
 uint8_t  planIdx = 0;
 bool     planReady = false;
+
+// ---- Cuộn chữ tên đường dài (Horizontal Ping-Pong Marquee) ----
+int16_t  scrollOffset = 0;        // Độ lệch pixel khi vẽ chữ
+int16_t  maxScrollOffset = 0;     // Độ lệch tối đa (độ rộng chữ - độ rộng màn hình)
+uint8_t  scrollState = 0;         // 0: Dừng ở đầu, 1: Cuộn tới, 2: Dừng ở cuối, 3: Cuộn lùi
+unsigned long lastScrollTick = 0;
+unsigned long scrollPauseUntil = 0;
+String   lastScrolledStreet = ""; // Theo dõi khi tên đường thay đổi để reset cuộn
 
 // ---- Onboard RGB LED (BW16) ----
 #ifndef LED_R
@@ -379,6 +388,91 @@ void updateOffline() {
   }
 }
 
+// ==========================================================================
+//  CẬP NHẬT CUỘN CHỮ TÊN ĐƯỜNG QUA LẠI (Ping-Pong Marquee)
+// ==========================================================================
+void updateScroll() {
+  if (!navActive || navDir == 'C' || navDir == 'X' || !navStreet.length()) {
+    scrollOffset = 0;
+    maxScrollOffset = 0;
+    scrollState = 0;
+    return;
+  }
+
+  // Tên đường thay đổi -> tính lại độ rộng và reset cuộn
+  if (navStreet != lastScrolledStreet) {
+    lastScrolledStreet = navStreet;
+    scrollOffset = 0;
+    scrollState = 0;
+    scrollPauseUntil = millis() + 1500UL; // Dừng ở đầu 1.5 giây để đọc đoạn đầu
+    lastScrollTick = millis();
+
+    u8g2.setFont(u8g2_font_6x10_tr);
+    int textW = u8g2.getStrWidth(navStreet.c_str());
+#if OLED_IS_128X64
+    int viewW = 128; // Toàn bộ chiều rộng đáy màn hình
+#else
+    int viewW = 92;  // Chiều rộng bên cạnh mũi tên (128 - 36)
+#endif
+    if (textW > viewW) {
+      maxScrollOffset = (int16_t)(textW - viewW + 8); // Thêm 8px đệm ở cuối
+    } else {
+      maxScrollOffset = 0;
+    }
+    needRedraw = true;
+    return;
+  }
+
+  // Nếu tên đường ngắn (vừa màn hình), không cần cuộn
+  if (maxScrollOffset <= 0) {
+    scrollOffset = 0;
+    return;
+  }
+
+  unsigned long now = millis();
+
+  // Đang trong thời gian tạm dừng (ở đầu hoặc ở cuối)
+  if (scrollPauseUntil > 0) {
+    if (now < scrollPauseUntil) return;
+    scrollPauseUntil = 0;
+    lastScrollTick = now;
+  }
+
+  // Tốc độ cuộn: mỗi 45ms dịch 2 pixel
+  if (now - lastScrollTick < 45UL) return;
+  lastScrollTick = now;
+
+  switch (scrollState) {
+    case 0: // Hết thời gian dừng ở đầu -> bắt đầu cuộn tới
+      scrollState = 1;
+      break;
+
+    case 1: // Đang cuộn sang trái (tiến về đuôi tên đường)
+      scrollOffset += 2;
+      if (scrollOffset >= maxScrollOffset) {
+        scrollOffset = maxScrollOffset;
+        scrollState = 2;
+        scrollPauseUntil = now + 1500UL; // Dừng ở cuối 1.5 giây để đọc hết tên đường
+      }
+      needRedraw = true;
+      break;
+
+    case 2: // Hết thời gian dừng ở cuối -> bắt đầu cuộn lùi
+      scrollState = 3;
+      break;
+
+    case 3: // Đang cuộn lùi về đầu
+      scrollOffset -= 2;
+      if (scrollOffset <= 0) {
+        scrollOffset = 0;
+        scrollState = 0;
+        scrollPauseUntil = now + 1500UL; // Dừng ở đầu 1.5 giây trước khi lặp lại chu kỳ
+      }
+      needRedraw = true;
+      break;
+  }
+}
+
 void noteLiveDistance(uint32_t newDistM) {
   unsigned long now = millis();
   if (navActive && lastDistUpdateMs > 0 && newDistM < prevNavDistM) {
@@ -545,10 +639,11 @@ void renderGuidance64() {
     u8g2.drawStr(38, 47, stepBuf);
   }
 
-  // 3. Thanh tên đường dưới đáy (y = 50..64)
+  // 3. Thanh tên đường dưới đáy có cuộn qua lại (y = 50..64)
   u8g2.drawHLine(0, 50, 128);
   u8g2.setFont(u8g2_font_6x10_tr);
-  u8g2.drawStr(0, 62, navStreet.c_str());
+  int drawX = -scrollOffset;
+  u8g2.drawStr(drawX, 62, navStreet.c_str());
 }
 
 #else
@@ -601,7 +696,10 @@ void renderGuidance32() {
   u8g2.setFont(u8g2_font_logisoso16_tr);
   u8g2.drawStr(36, 16, navDist.c_str());
   u8g2.setFont(u8g2_font_6x10_tr);
-  u8g2.drawStr(36, 30, navStreet.c_str());
+  // Cắt cúp vùng hiển thị x: 36..128 để chữ cuộn không đè lên mũi tên
+  u8g2.setClipWindow(36, 18, 128, 32);
+  u8g2.drawStr(36 - scrollOffset, 30, navStreet.c_str());
+  u8g2.setMaxClipWindow();
   if (offlineMode) {
     u8g2.setFont(u8g2_font_5x7_tr);
     u8g2.drawStr(104, 7, "OFF");
@@ -666,6 +764,7 @@ void setup() {
   initRgb();
   u8g2.begin();
   u8g2.setContrast(255);
+  Wire.setClock(400000); // 400kHz I2C Fast Mode giúp cuộn chữ mượt mà
 
   // Gói tin quảng bá BLE (tên MotoNav và UART UUID)
   advdata.addFlags(GAP_ADTYPE_FLAGS_GENERAL | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED);
@@ -700,9 +799,9 @@ void setup() {
 
   Serial.println("[BLE] Dang quang ba: MotoNav");
 #if OLED_IS_128X64
-  Serial.println("[FW] MotoNav HUD v3 - OLED 0.96 inch 128x64 + Offline Plan");
+  Serial.println("[FW] MotoNav HUD v3.1 - OLED 0.96\" 128x64 + Marquee Scroll + Offline");
 #else
-  Serial.println("[FW] MotoNav HUD v3 - OLED 0.91 inch 128x32 + Offline Plan");
+  Serial.println("[FW] MotoNav HUD v3.1 - OLED 0.91\" 128x32 + Marquee Scroll + Offline");
 #endif
   render();
 }
@@ -762,7 +861,7 @@ void loop() {
       handleLine(lineBuf);
       lineBuf = "";
     } else if (c != '\r') {
-      if (lineBuf.length() < 80) lineBuf += c;
+      if (lineBuf.length() < 96) lineBuf += c;
     }
   }
 
@@ -773,6 +872,7 @@ void loop() {
   }
 
   updateOffline();
+  updateScroll(); // <-- Cập nhật cuộn chữ tên đường dài qua lại
 
   if (needRedraw) {
     needRedraw = false;
@@ -780,5 +880,5 @@ void loop() {
   }
 
   updateLed();
-  delay(10);
+  delay(5);
 }

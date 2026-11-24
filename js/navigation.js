@@ -44,7 +44,7 @@ MotoNav.navigation = (() => {
     if (bolds.length >= 2) st = bolds[bolds.length - 1];
     else if (bolds.length === 1) st = bolds[0];
     else st = step.instructions.replace(/<[^>]*>/g, '').trim();
-    return ascii(st).slice(0, 15);
+    return ascii(st).replace(/[\r\n|]/g, ' ').slice(0, 45);
   }
 
   // Giải mã hướng rẽ từ OpenStreetMap OSRM
@@ -97,7 +97,7 @@ MotoNav.navigation = (() => {
         if (dir === 'A') street = street || 'Diem den';
       }
 
-      street = ascii(street).replace(/[\r\n|]/g, ' ').slice(0, 15);
+      street = ascii(street).replace(/[\r\n|]/g, ' ').slice(0, 45);
       out.push({
         dir,
         distM: Math.max(0, Math.round(distM)),
@@ -167,7 +167,7 @@ MotoNav.navigation = (() => {
   //  Chỉ dẫn & tự động reroute
   // ------------------------------------------------------------------
   function arriveMessage() {
-    return 'A|0m|' + ascii((state.dest && state.dest.name) || 'Diem den').slice(0, 15) + '\n';
+    return 'A|0m|' + ascii((state.dest && state.dest.name) || 'Diem den').replace(/[\r\n|]/g, ' ').slice(0, 45) + '\n';
   }
 
   function handleArrival() {
@@ -239,7 +239,7 @@ MotoNav.navigation = (() => {
       const up = state.steps[state.k + 1];
       const d = al.off < 100 ? al.rem : hav(p, up.maneuver.location);
       const dir = dirFromOsrm(up.maneuver);
-      const st = ascii(up.name || up.ref || '').slice(0, 15);
+      const st = ascii(up.name || up.ref || '').replace(/[\r\n|]/g, ' ').slice(0, 45);
       const m = `${dir}|${fmt(d)}|${st}\n`;
       state.curMsg = m;
       renderHUD(dir, fmt(d), st);
